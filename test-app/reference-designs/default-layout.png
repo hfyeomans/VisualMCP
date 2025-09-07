@@ -1,0 +1,17 @@
+# Reference Design Placeholder
+
+This directory should contain reference design images for comparison testing.
+
+For actual implementation, you would place PNG/JPEG files here such as:
+- default-layout.png
+- compact-layout.png  
+- wide-layout.png
+- broken-layout.png
+
+These images serve as the "expected" designs that the Visual MCP will compare against when taking screenshots of the test app.
+
+To generate these reference images:
+1. Run the test app: `cd test-app && npm run dev`
+2. Navigate to each layout mode
+3. Take manual screenshots or use the MCP screenshot tool
+4. Save them as reference images in this directory
