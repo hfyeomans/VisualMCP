@@ -10,7 +10,12 @@
     "start": "node dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'Linting not configured yet'",
     "clean": "rm -rf dist",
+    "validate": "node validate-mcp.js",
+    "demo": "node cli-tools/demo.js",
+    "test-runner": "node cli-tools/test-runner.js",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
@@ -23,7 +28,15 @@
     "claude",
     "ai"
   ],
-  "author": "Visual MCP Team",
+  "author": "Hank Yeomans <hank.yeomans@me.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hfyeomans/VisualMCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hfyeomans/VisualMCP/issues"
+  },
+  "homepage": "https://github.com/hfyeomans/VisualMCP#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
