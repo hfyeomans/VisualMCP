@@ -3,8 +3,21 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-// z is imported for future schema validation
-// import { z } from 'zod';
+
+// Core imports
+import { config } from './core/config.js';
+import { createLogger } from './core/logger.js';
+import { container } from './core/container.js';
+import { cleanupManager, browserManager } from './core/resource-manager.js';
+import { isVisualMCPError, ValidationError } from './core/errors.js';
+
+// Service imports
+import { ScreenshotEngine } from './screenshot/puppeteer.js';
+import { ComparisonEngine } from './comparison/differ.js';
+import { FeedbackGenerator } from './analysis/feedback-generator.js';
+import { MonitoringManager } from './screenshot/monitoring.js';
+
+// Type imports
 import { 
   TakeScreenshotParamsSchema,
   CompareVisualsParamsSchema,
@@ -12,19 +25,24 @@ import {
   StartMonitoringParamsSchema,
   StopMonitoringParamsSchema
 } from './types/index.js';
-import { ScreenshotEngine } from './screenshot/puppeteer.js';
-import { ComparisonEngine } from './comparison/differ.js';
-import { FeedbackAnalyzer } from './comparison/analyzer.js';
-import { MonitoringManager } from './screenshot/monitoring.js';
 
+// Interface imports
+import { SERVICE_TOKENS } from './interfaces/index.js';
+
+const logger = createLogger('MCPServer');
+
+/**
+ * Visual MCP Server with dependency injection and proper resource management
+ */
 class VisualMCPServer {
   private server: Server;
-  private screenshotEngine: ScreenshotEngine;
-  private comparisonEngine: ComparisonEngine;
-  private feedbackAnalyzer: FeedbackAnalyzer;
-  private monitoringManager: MonitoringManager;
 
   constructor() {
+    logger.info('Initializing Visual MCP Server', {
+      version: '1.0.0',
+      nodeVersion: process.version
+    });
+
     this.server = new Server(
       {
         name: 'visual-mcp-server',
@@ -37,16 +55,47 @@ class VisualMCPServer {
       }
     );
 
-    this.screenshotEngine = new ScreenshotEngine();
-    this.comparisonEngine = new ComparisonEngine();
-    this.feedbackAnalyzer = new FeedbackAnalyzer();
-    this.monitoringManager = new MonitoringManager(this.screenshotEngine, this.comparisonEngine);
-
+    this.setupDependencies();
     this.setupToolHandlers();
     this.setupErrorHandling();
+
+    logger.info('Visual MCP Server initialized successfully');
   }
 
-  private setupToolHandlers() {
+  private setupDependencies(): void {
+    logger.debug('Setting up dependency injection');
+
+    // Register core services as singletons
+    container.registerInstance(SERVICE_TOKENS.BROWSER_MANAGER, browserManager);
+    
+    container.registerSingleton(SERVICE_TOKENS.SCREENSHOT_ENGINE, () => {
+      logger.debug('Creating ScreenshotEngine instance');
+      return new ScreenshotEngine(browserManager);
+    });
+
+    container.registerSingleton(SERVICE_TOKENS.COMPARISON_ENGINE, () => {
+      logger.debug('Creating ComparisonEngine instance');
+      return new ComparisonEngine();
+    });
+
+    container.registerSingleton(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
+      logger.debug('Creating FeedbackGenerator instance');
+      return new FeedbackGenerator();
+    });
+
+    container.registerSingleton(SERVICE_TOKENS.MONITORING_MANAGER, () => {
+      logger.debug('Creating MonitoringManager instance');
+      const screenshotEngine = container.resolve(SERVICE_TOKENS.SCREENSHOT_ENGINE);
+      const comparisonEngine = container.resolve(SERVICE_TOKENS.COMPARISON_ENGINE);
+      return new MonitoringManager(screenshotEngine, comparisonEngine);
+    });
+
+    logger.debug('Dependency injection setup completed');
+  }
+
+  private setupToolHandlers(): void {
+    logger.debug('Setting up MCP tool handlers');
+
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
@@ -185,135 +234,261 @@ class VisualMCPServer {
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const startTime = Date.now();
+      logger.info('Tool call received', { 
+        tool: request.params.name,
+        requestId: request.id
+      });
+
       try {
         switch (request.params.name) {
-          case 'take_screenshot': {
-            const params = TakeScreenshotParamsSchema.parse(request.params.arguments);
-            const result = await this.screenshotEngine.takeScreenshot(params.target, params.options);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(result, null, 2)
-                }
-              ]
-            };
-          }
-
-          case 'compare_visuals': {
-            const params = CompareVisualsParamsSchema.parse(request.params.arguments);
-            const result = await this.comparisonEngine.compare(
-              params.currentImage,
-              params.referenceImage,
-              params.options
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(result, null, 2)
-                }
-              ]
-            };
-          }
-
-          case 'analyze_ui_feedback': {
-            const params = AnalyzeFeedbackParamsSchema.parse(request.params.arguments);
-            const result = await this.feedbackAnalyzer.analyzeDifferences(
-              params.diffImagePath,
-              params.options
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(result, null, 2)
-                }
-              ]
-            };
-          }
-
-          case 'start_monitoring': {
-            const params = StartMonitoringParamsSchema.parse(request.params.arguments);
-            const sessionId = await this.monitoringManager.startMonitoring(params);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({ sessionId, message: 'Monitoring started successfully' }, null, 2)
-                }
-              ]
-            };
-          }
-
-          case 'stop_monitoring': {
-            const params = StopMonitoringParamsSchema.parse(request.params.arguments);
-            const summary = await this.monitoringManager.stopMonitoring(params.sessionId);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(summary, null, 2)
-                }
-              ]
-            };
-          }
-
+          case 'take_screenshot':
+            return await this.handleTakeScreenshot(request);
+          
+          case 'compare_visuals':
+            return await this.handleCompareVisuals(request);
+          
+          case 'analyze_ui_feedback':
+            return await this.handleAnalyzeFeedback(request);
+          
+          case 'start_monitoring':
+            return await this.handleStartMonitoring(request);
+          
+          case 'stop_monitoring':
+            return await this.handleStopMonitoring(request);
+          
           default:
-            throw new Error(`Unknown tool: ${request.params.name}`);
+            throw new ValidationError(`Unknown tool: ${request.params.name}`);
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ error: errorMessage }, null, 2)
-            }
-          ],
-          isError: true
-        };
+        const duration = Date.now() - startTime;
+        logger.error('Tool call failed', error as Error, { 
+          tool: request.params.name,
+          requestId: request.id,
+          duration
+        });
+
+        return this.formatErrorResponse(error);
+      } finally {
+        const duration = Date.now() - startTime;
+        logger.debug('Tool call completed', { 
+          tool: request.params.name,
+          requestId: request.id,
+          duration
+        });
       }
     });
+
+    logger.debug('MCP tool handlers setup completed');
   }
 
-  private setupErrorHandling() {
+  private async handleTakeScreenshot(request: any) {
+    const params = TakeScreenshotParamsSchema.parse(request.params.arguments);
+    const screenshotEngine = container.resolve(SERVICE_TOKENS.SCREENSHOT_ENGINE);
+    
+    logger.debug('Taking screenshot', { 
+      targetType: params.target.type,
+      format: params.options?.format
+    });
+
+    const result = await screenshotEngine.takeScreenshot(params.target, params.options);
+    
+    logger.info('Screenshot taken successfully', { 
+      filepath: result.filepath,
+      size: result.size,
+      dimensions: `${result.width}x${result.height}`
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }]
+    };
+  }
+
+  private async handleCompareVisuals(request: any) {
+    const params = CompareVisualsParamsSchema.parse(request.params.arguments);
+    const comparisonEngine = container.resolve(SERVICE_TOKENS.COMPARISON_ENGINE);
+    
+    logger.debug('Comparing images', { 
+      currentImage: params.currentImage,
+      referenceImage: params.referenceImage,
+      tolerance: params.options?.tolerance
+    });
+
+    const result = await comparisonEngine.compare(
+      params.currentImage,
+      params.referenceImage,
+      params.options
+    );
+    
+    logger.info('Visual comparison completed', { 
+      differencePercentage: result.differencePercentage,
+      isMatch: result.isMatch,
+      regionsCount: result.regions.length
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }]
+    };
+  }
+
+  private async handleAnalyzeFeedback(request: any) {
+    const params = AnalyzeFeedbackParamsSchema.parse(request.params.arguments);
+    const feedbackAnalyzer = container.resolve(SERVICE_TOKENS.FEEDBACK_ANALYZER);
+    
+    logger.debug('Analyzing feedback', { 
+      diffImagePath: params.diffImagePath,
+      priority: params.options?.priority,
+      suggestionsType: params.options?.suggestionsType
+    });
+
+    const result = await feedbackAnalyzer.analyzeDifferences(
+      params.diffImagePath,
+      params.options
+    );
+    
+    logger.info('Feedback analysis completed', { 
+      issuesCount: result.issues.length,
+      suggestionsCount: result.suggestions.length,
+      confidence: result.confidence
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }]
+    };
+  }
+
+  private async handleStartMonitoring(request: any) {
+    const params = StartMonitoringParamsSchema.parse(request.params.arguments);
+    const monitoringManager = container.resolve(SERVICE_TOKENS.MONITORING_MANAGER);
+    
+    logger.debug('Starting monitoring', { 
+      targetType: params.target.type,
+      interval: params.interval,
+      autoFeedback: params.autoFeedback
+    });
+
+    const sessionId = await monitoringManager.startMonitoring(params);
+    
+    logger.info('Monitoring started', { 
+      sessionId,
+      interval: params.interval
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ 
+          sessionId, 
+          message: 'Monitoring started successfully' 
+        }, null, 2)
+      }]
+    };
+  }
+
+  private async handleStopMonitoring(request: any) {
+    const params = StopMonitoringParamsSchema.parse(request.params.arguments);
+    const monitoringManager = container.resolve(SERVICE_TOKENS.MONITORING_MANAGER);
+    
+    logger.debug('Stopping monitoring', { sessionId: params.sessionId });
+
+    const summary = await monitoringManager.stopMonitoring(params.sessionId);
+    
+    logger.info('Monitoring stopped', { 
+      sessionId: params.sessionId,
+      duration: summary.duration,
+      screenshotsCount: summary.totalScreenshots
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(summary, null, 2)
+      }]
+    };
+  }
+
+  private formatErrorResponse(error: unknown) {
+    if (isVisualMCPError(error)) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: {
+              type: error.name,
+              code: error.code,
+              message: error.message,
+              component: error.component,
+              timestamp: error.timestamp
+            }
+          }, null, 2)
+        }],
+        isError: true
+      };
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ 
+          error: {
+            type: 'UnknownError',
+            message: errorMessage
+          }
+        }, null, 2)
+      }],
+      isError: true
+    };
+  }
+
+  private setupErrorHandling(): void {
     this.server.onerror = (error) => {
-      console.error('[MCP Error]', error);
+      logger.error('MCP Server error', error);
     };
 
-    process.on('SIGINT', async () => {
-      await this.cleanup();
-      process.exit(0);
-    });
-
-    process.on('SIGTERM', async () => {
-      await this.cleanup();
-      process.exit(0);
+    // Register cleanup handler for server
+    cleanupManager.registerCleanupHandler('MCPServer', async () => {
+      logger.info('Shutting down MCP server');
+      // Server cleanup would go here if needed
     });
   }
 
-  private async cleanup() {
+  async run(): Promise<void> {
     try {
-      await this.monitoringManager.cleanup();
-      await this.screenshotEngine.cleanup();
-      console.error('Visual MCP Server shut down gracefully');
-    } catch (error) {
-      console.error('Error during cleanup:', error);
-    }
-  }
+      logger.info('Starting Visual MCP Server', {
+        config: {
+          outputDir: config.outputDir,
+          logLevel: config.loggingConfig.level,
+          browserHeadless: config.browserConfig.headless
+        }
+      });
 
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Visual MCP Server running on stdio');
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+      
+      logger.info('Visual MCP Server running on stdio');
+    } catch (error) {
+      logger.error('Failed to start MCP server', error as Error);
+      throw error;
+    }
   }
 }
 
+// Main execution
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new VisualMCPServer();
+  
   server.run().catch((error) => {
-    console.error('Fatal error:', error);
+    logger.error('Fatal server error', error);
     process.exit(1);
   });
 }

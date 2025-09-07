@@ -1,70 +1,107 @@
-import puppeteer, { Browser } from 'puppeteer';
-import fs from 'fs-extra';
 import path from 'path';
+import { Page } from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
+import { IScreenshotEngine, IBrowserManager } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
+import { 
+  ScreenshotError, 
+  ScreenshotTimeoutError, 
+  ScreenshotNavigationError, 
+  ScreenshotCaptureError 
+} from '../core/errors.js';
+import { config } from '../core/config.js';
+import { createLogger } from '../core/logger.js';
+import { fileManager } from '../utils/file-utils.js';
+import { imageProcessor } from '../utils/image-utils.js';
 
-export class ScreenshotEngine {
-  private browser: Browser | null = null;
+const logger = createLogger('ScreenshotEngine');
+
+export class ScreenshotEngine implements IScreenshotEngine {
   private outputDir: string;
 
-  constructor() {
-    this.outputDir = path.join(process.cwd(), 'screenshots');
+  constructor(private browserManager: IBrowserManager) {
+    this.outputDir = config.outputDir;
     this.ensureOutputDirectory();
+    
+    logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
   }
 
-  private async ensureOutputDirectory() {
-    await fs.ensureDir(this.outputDir);
-  }
-
-  private async getBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
-      });
-    }
-    return this.browser;
+  private async ensureOutputDirectory(): Promise<void> {
+    await fileManager.ensureDirectory(this.outputDir);
   }
 
   async takeScreenshot(
     target: ScreenshotTarget,
-    options: ScreenshotOptions = { format: 'png', fullPage: false }
+    options: ScreenshotOptions = {}
   ): Promise<ScreenshotResult> {
+    const startTime = Date.now();
     const timestamp = new Date().toISOString();
-    const filename = options.filename || `screenshot_${uuidv4()}.${options.format || 'png'}`;
+    
+    // Apply defaults from config
+    const mergedOptions = {
+      format: options.format || config.screenshotDefaults.defaultFormat,
+      quality: options.quality || config.screenshotDefaults.defaultQuality,
+      fullPage: options.fullPage || false,
+      filename: options.filename,
+      clip: options.clip
+    } as const;
+
+    const filename = mergedOptions.filename || 
+      `screenshot_${uuidv4()}.${mergedOptions.format}`;
     const filepath = path.join(this.outputDir, filename);
 
-    switch (target.type) {
-      case 'url':
-        return await this.takeWebScreenshot(target, options, filepath, timestamp);
+    logger.info('Taking screenshot', { 
+      targetType: target.type,
+      format: mergedOptions.format,
+      filename
+    });
+
+    try {
+      switch (target.type) {
+        case 'url':
+          return await this.takeWebScreenshot(target, mergedOptions, filepath, timestamp);
+        
+        case 'region':
+          return await this.takeRegionScreenshot(target, mergedOptions, filepath, timestamp);
+        
+        default:
+          throw new ScreenshotError(
+            `Unsupported target type: ${(target as any).type}`,
+            'UNSUPPORTED_TARGET_TYPE'
+          );
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Screenshot failed', error as Error, { 
+        targetType: target.type,
+        duration,
+        filename
+      });
       
-      case 'region':
-        return await this.takeRegionScreenshot(target, options, filepath, timestamp);
+      if (error instanceof ScreenshotError) {
+        throw error;
+      }
       
-      default:
-        throw new Error(`Unsupported target type: ${(target as any).type}`);
+      throw new ScreenshotCaptureError(
+        (error as Error).message,
+        error as Error
+      );
     }
   }
 
   private async takeWebScreenshot(
     target: ScreenshotTarget & { type: 'url' },
-    options: ScreenshotOptions,
+    options: typeof config.screenshotDefaults & { filename?: string; clip?: any },
     filepath: string,
     timestamp: string
   ): Promise<ScreenshotResult> {
-    const browser = await this.getBrowser();
-    const page = await browser.newPage();
-
+    let page: Page | null = null;
+    
     try {
+      page = await this.browserManager.createPage();
+      
+      logger.debug('Navigating to URL', { url: target.url });
+
       // Set viewport if specified
       if (target.viewport) {
         await page.setViewport({
@@ -72,15 +109,30 @@ export class ScreenshotEngine {
           height: target.viewport.height,
           deviceScaleFactor: 1
         });
+        
+        logger.debug('Viewport set', target.viewport);
       }
 
-      // Navigate to URL
-      await page.goto(target.url, {
-        waitUntil: 'networkidle0',
-        timeout: 30000
-      });
+      // Navigate to URL with timeout handling
+      try {
+        await page.goto(target.url, {
+          waitUntil: config.screenshotDefaults.waitForNetworkIdle ? 'networkidle0' : 'load',
+          timeout: config.screenshotDefaults.timeout
+        });
+      } catch (error) {
+        if ((error as Error).message.includes('timeout')) {
+          throw new ScreenshotTimeoutError(
+            target.url, 
+            config.screenshotDefaults.timeout,
+            error as Error
+          );
+        }
+        throw new ScreenshotNavigationError(target.url, error as Error);
+      }
 
-      // Wait for any animations to complete
+      logger.debug('Page loaded, waiting for stability');
+
+      // Wait for any animations or dynamic content to complete
       await page.evaluate(() => {
         return new Promise<void>((resolve) => {
           if (document.readyState === 'complete') {
@@ -94,8 +146,8 @@ export class ScreenshotEngine {
       // Take screenshot
       const screenshotOptions: any = {
         path: filepath,
-        type: options.format || 'png',
-        fullPage: options.fullPage || false
+        type: options.format,
+        fullPage: options.fullPage
       };
 
       if (options.format === 'jpeg' && options.quality) {
@@ -106,57 +158,74 @@ export class ScreenshotEngine {
         screenshotOptions.clip = options.clip;
       }
 
+      logger.debug('Capturing screenshot', { 
+        fullPage: options.fullPage,
+        hasClip: !!options.clip
+      });
+
       await page.screenshot(screenshotOptions);
 
-      // Get image dimensions
-      const stats = await fs.stat(filepath);
-      const dimensions = await this.getImageDimensions(filepath);
+      // Get image metadata
+      const metadata = await imageProcessor.getImageMetadata(filepath);
+      
+      logger.info('Web screenshot completed successfully', { 
+        filepath,
+        size: metadata.size,
+        dimensions: `${metadata.width}x${metadata.height}`,
+        url: target.url
+      });
 
       return {
         filepath,
-        width: dimensions.width,
-        height: dimensions.height,
-        format: options.format || 'png',
-        size: stats.size,
+        width: metadata.width,
+        height: metadata.height,
+        format: options.format,
+        size: metadata.size,
         timestamp,
         target
       };
 
     } finally {
-      await page.close();
+      if (page) {
+        await this.browserManager.closePage(page);
+      }
     }
   }
 
   private async takeRegionScreenshot(
     target: ScreenshotTarget & { type: 'region' },
-    options: ScreenshotOptions,
+    options: typeof config.screenshotDefaults & { filename?: string; clip?: any },
     filepath: string,
     timestamp: string
   ): Promise<ScreenshotResult> {
-    // For region screenshots, we'll use a system-level screenshot tool
-    // This implementation will depend on the platform
-    const browser = await this.getBrowser();
-    const page = await browser.newPage();
-
-    try {
-      // Create a simple HTML page that we can screenshot
-      // This is a workaround since puppeteer can't directly capture desktop regions
-      const html = `
-        <html>
-          <body style="margin: 0; padding: 20px; font-family: Arial, sans-serif;">
-            <div style="border: 2px dashed #ccc; padding: 20px; text-align: center;">
-              <h2>Region Screenshot Placeholder</h2>
-              <p>Target Region: ${target.x}, ${target.y} (${target.width}x${target.height})</p>
-              <p style="color: #666; font-size: 14px;">
-                Note: Desktop region capture requires platform-specific implementation.
-                <br>This is a placeholder for region (${target.x}, ${target.y}, ${target.width}, ${target.height})
-              </p>
+    logger.warn('Desktop region capture not fully implemented, creating placeholder');
+    
+    // This is a placeholder implementation - in production, you'd use platform-specific
+    // screen capture APIs or tools like screenshot-desktop
+    const placeholderHtml = `
+      <html>
+        <body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f0f0f0;">
+          <div style="border: 2px dashed #999; padding: 30px; text-align: center; background: white;">
+            <h2 style="color: #666;">Region Screenshot Placeholder</h2>
+            <p><strong>Target Region:</strong> (${target.x}, ${target.y}) ${target.width}×${target.height}</p>
+            <p style="color: #666; font-size: 14px;">
+              Desktop region capture requires platform-specific implementation.
+              <br>This placeholder represents the requested region.
+            </p>
+            <div style="margin-top: 20px; padding: 10px; background: #e8f4f8; border: 1px solid #b8e0f0; border-radius: 4px;">
+              <small>Timestamp: ${timestamp}</small>
             </div>
-          </body>
-        </html>
-      `;
+          </div>
+        </body>
+      </html>
+    `;
 
-      await page.setContent(html);
+    let page: Page | null = null;
+    
+    try {
+      page = await this.browserManager.createPage();
+      
+      await page.setContent(placeholderHtml);
       await page.setViewport({
         width: Math.max(target.width, 400),
         height: Math.max(target.height, 300)
@@ -164,7 +233,7 @@ export class ScreenshotEngine {
 
       const screenshotOptions: any = {
         path: filepath,
-        type: options.format || 'png',
+        type: options.format,
         clip: {
           x: 0,
           y: 0,
@@ -179,63 +248,58 @@ export class ScreenshotEngine {
 
       await page.screenshot(screenshotOptions);
 
-      const stats = await fs.stat(filepath);
-      const dimensions = await this.getImageDimensions(filepath);
+      const metadata = await imageProcessor.getImageMetadata(filepath);
+      
+      logger.info('Region screenshot placeholder created', { 
+        filepath,
+        region: `${target.x},${target.y} ${target.width}×${target.height}`,
+        size: metadata.size
+      });
 
       return {
         filepath,
-        width: dimensions.width,
-        height: dimensions.height,
-        format: options.format || 'png',
-        size: stats.size,
+        width: metadata.width,
+        height: metadata.height,
+        format: options.format,
+        size: metadata.size,
         timestamp,
         target
       };
 
     } finally {
-      await page.close();
-    }
-  }
-
-  private async getImageDimensions(filepath: string): Promise<{ width: number; height: number }> {
-    try {
-      const sharp = (await import('sharp')).default;
-      const metadata = await sharp(filepath).metadata();
-      return {
-        width: metadata.width || 0,
-        height: metadata.height || 0
-      };
-    } catch (error) {
-      console.error('Error getting image dimensions:', error);
-      return { width: 0, height: 0 };
-    }
-  }
-
-  async cleanup(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+      if (page) {
+        await this.browserManager.closePage(page);
+      }
     }
   }
 
   async listScreenshots(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.outputDir);
-      return files
-        .filter(file => file.match(/\.(png|jpeg|jpg)$/i))
-        .map(file => path.join(this.outputDir, file));
+      logger.debug('Listing screenshots', { directory: this.outputDir });
+      
+      const screenshots = await fileManager.listFiles(this.outputDir);
+      const imageFiles = screenshots.filter(file => 
+        file.match(/\.(png|jpeg|jpg)$/i)
+      );
+      
+      logger.debug('Screenshots listed', { count: imageFiles.length });
+      return imageFiles;
     } catch (error) {
-      console.error('Error listing screenshots:', error);
+      logger.error('Error listing screenshots', error as Error, { 
+        directory: this.outputDir 
+      });
       return [];
     }
   }
 
   async deleteScreenshot(filepath: string): Promise<boolean> {
     try {
-      await fs.remove(filepath);
+      logger.debug('Deleting screenshot', { filepath });
+      await fileManager.deleteFile(filepath);
+      logger.info('Screenshot deleted', { filepath });
       return true;
     } catch (error) {
-      console.error('Error deleting screenshot:', error);
+      logger.error('Failed to delete screenshot', error as Error, { filepath });
       return false;
     }
   }
@@ -245,7 +309,18 @@ export class ScreenshotEngine {
   }
 
   setOutputDirectory(dir: string): void {
+    logger.info('Changing output directory', { 
+      from: this.outputDir,
+      to: dir
+    });
+    
     this.outputDir = dir;
     this.ensureOutputDirectory();
+  }
+
+  async cleanup(): Promise<void> {
+    logger.info('Cleaning up ScreenshotEngine');
+    // Cleanup is handled by BrowserManager
+    // Any additional cleanup specific to ScreenshotEngine would go here
   }
 }
