@@ -129,6 +129,9 @@ temp/
 config.json
 settings.json
 
+# Archive folder for old documentation
+archive/
+
 # Ignore all markdown files except README.md and CHANGELOG.md
 *.md
 !README.md
