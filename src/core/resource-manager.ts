@@ -1,9 +1,7 @@
 import { EventEmitter } from 'events';
-import { ICleanupManager, IBrowserManager } from '../interfaces/index.js';
-import { BrowserLaunchError, BrowserConnectionError } from '../core/errors.js';
-import { createLogger } from '../core/logger.js';
-import { config } from '../core/config.js';
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { ICleanupManager } from '../interfaces/index.js';
+import { createLogger } from './logger.js';
+import { browserManager } from './browser-manager.js';
 
 const logger = createLogger('ResourceManager');
 
@@ -23,10 +21,10 @@ export class CleanupManager extends EventEmitter implements ICleanupManager {
   private setupProcessHandlers(): void {
     const shutdown = async (signal: string) => {
       if (this.isShuttingDown) return;
-      
+
       logger.info('Shutdown signal received', { signal });
       this.isShuttingDown = true;
-      
+
       try {
         await this.cleanup();
         logger.info('Cleanup completed successfully');
@@ -40,15 +38,17 @@ export class CleanupManager extends EventEmitter implements ICleanupManager {
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGQUIT', () => shutdown('SIGQUIT'));
-    
+
     // Handle uncaught exceptions
-    process.on('uncaughtException', async (error) => {
+    process.on('uncaughtException', async error => {
       logger.error('Uncaught exception, shutting down', error);
       await shutdown('uncaughtException');
     });
 
     process.on('unhandledRejection', async (reason, promise) => {
-      logger.error('Unhandled promise rejection, shutting down', new Error(String(reason)), { promise });
+      logger.error('Unhandled promise rejection, shutting down', new Error(String(reason)), {
+        promise
+      });
       await shutdown('unhandledRejection');
     });
   }
@@ -90,241 +90,21 @@ export class CleanupManager extends EventEmitter implements ICleanupManager {
 
     const failures = results.filter(r => r.status === 'rejected');
     if (failures.length > 0) {
-      logger.warn('Some cleanup handlers failed', { 
+      logger.warn('Some cleanup handlers failed', {
         failures: failures.length,
         total: results.length
       });
     }
 
-    this.emit('cleanup_completed', { 
+    this.emit('cleanup_completed', {
       total: results.length,
       failures: failures.length
     });
-    
-    logger.info('Cleanup completed', { 
+
+    logger.info('Cleanup completed', {
       total: results.length,
       failures: failures.length
     });
-  }
-}
-
-/**
- * Manages browser instances with proper lifecycle management
- */
-export class BrowserManager extends EventEmitter implements IBrowserManager {
-  private browser: Browser | null = null;
-  private pages = new Set<Page>();
-  private isInitializing = false;
-  private healthCheckInterval: NodeJS.Timeout | null = null;
-
-  constructor(private cleanupManager: CleanupManager) {
-    super();
-    
-    // Register cleanup handler
-    cleanupManager.registerCleanupHandler('BrowserManager', () => this.cleanup());
-    
-    // Start health check
-    this.startHealthCheck();
-    
-    logger.debug('BrowserManager initialized');
-  }
-
-  private startHealthCheck(): void {
-    this.healthCheckInterval = setInterval(async () => {
-      try {
-        const healthy = await this.isHealthy();
-        if (!healthy) {
-          logger.warn('Browser health check failed, will restart on next use');
-          await this.restartBrowser();
-        }
-      } catch (error) {
-        logger.warn('Health check error', { error: (error as Error).message });
-      }
-    }, 30000); // Check every 30 seconds
-  }
-
-  async getBrowser(): Promise<Browser> {
-    if (!this.browser || this.browser.process()?.killed) {
-      if (this.isInitializing) {
-        // Wait for ongoing initialization
-        await new Promise(resolve => this.once('browser_ready', resolve));
-        if (!this.browser) {
-          throw new BrowserLaunchError();
-        }
-        return this.browser;
-      }
-
-      await this.initializeBrowser();
-    }
-
-    try {
-      // Test if browser is still responsive
-      await this.browser.version();
-      return this.browser;
-    } catch (error) {
-      logger.warn('Browser unresponsive, restarting', { error: (error as Error).message });
-      await this.restartBrowser();
-      return this.browser!;
-    }
-  }
-
-  private async initializeBrowser(): Promise<void> {
-    this.isInitializing = true;
-    
-    try {
-      logger.info('Launching browser');
-      
-      const browserConfig = config.browserConfig;
-      this.browser = await puppeteer.launch({
-        headless: browserConfig.headless,
-        args: browserConfig.args,
-        timeout: browserConfig.timeout
-      });
-
-      // Set up browser event handlers
-      this.browser.on('disconnected', () => {
-        logger.warn('Browser disconnected');
-        this.browser = null;
-        this.emit('browser_disconnected');
-      });
-
-      logger.info('Browser launched successfully');
-      this.emit('browser_ready');
-    } catch (error) {
-      logger.error('Failed to launch browser', error as Error);
-      throw new BrowserLaunchError(error as Error);
-    } finally {
-      this.isInitializing = false;
-    }
-  }
-
-  private async restartBrowser(): Promise<void> {
-    logger.info('Restarting browser');
-    
-    try {
-      // Close existing browser
-      if (this.browser) {
-        await this.closeBrowser();
-      }
-      
-      // Initialize new browser
-      await this.initializeBrowser();
-      
-      logger.info('Browser restarted successfully');
-    } catch (error) {
-      logger.error('Failed to restart browser', error as Error);
-      throw error;
-    }
-  }
-
-  async createPage(): Promise<Page> {
-    try {
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
-      
-      // Track the page
-      this.pages.add(page);
-      
-      // Set up page defaults
-      await page.setDefaultNavigationTimeout(config.screenshotDefaults.timeout);
-      await page.setDefaultTimeout(config.screenshotDefaults.timeout);
-      
-      // Handle page events
-      page.on('close', () => {
-        this.pages.delete(page);
-        logger.debug('Page closed', { activePagesCount: this.pages.size });
-      });
-
-      page.on('error', (error) => {
-        logger.warn('Page error', { error: error.message });
-      });
-
-      logger.debug('Page created', { activePagesCount: this.pages.size });
-      this.emit('page_created', { pagesCount: this.pages.size });
-      
-      return page;
-    } catch (error) {
-      logger.error('Failed to create page', error as Error);
-      throw new BrowserConnectionError(error as Error);
-    }
-  }
-
-  async closePage(page: Page): Promise<void> {
-    try {
-      if (!page.isClosed()) {
-        await page.close();
-      }
-      this.pages.delete(page);
-      
-      logger.debug('Page closed manually', { activePagesCount: this.pages.size });
-    } catch (error) {
-      logger.warn('Error closing page', { error: (error as Error).message });
-      this.pages.delete(page); // Remove from tracking anyway
-    }
-  }
-
-  async isHealthy(): Promise<boolean> {
-    try {
-      if (!this.browser || this.browser.process()?.killed) {
-        return false;
-      }
-
-      // Try to get browser version as a health check
-      await this.browser.version();
-      return true;
-    } catch (error) {
-      logger.debug('Browser health check failed', { error: (error as Error).message });
-      return false;
-    }
-  }
-
-  private async closeBrowser(): Promise<void> {
-    if (!this.browser) return;
-
-    try {
-      logger.debug('Closing browser', { activePagesCount: this.pages.size });
-      
-      // Close all pages first
-      const pageClosePromises = Array.from(this.pages).map(async (page) => {
-        try {
-          if (!page.isClosed()) {
-            await page.close();
-          }
-        } catch (error) {
-          logger.debug('Error closing page during browser shutdown', { error: (error as Error).message });
-        }
-      });
-
-      await Promise.allSettled(pageClosePromises);
-      this.pages.clear();
-
-      // Close browser
-      await this.browser.close();
-      this.browser = null;
-      
-      logger.debug('Browser closed successfully');
-    } catch (error) {
-      logger.warn('Error closing browser', { error: (error as Error).message });
-      this.browser = null; // Reset anyway
-    }
-  }
-
-  async cleanup(): Promise<void> {
-    logger.info('Starting browser cleanup');
-    
-    // Stop health check
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-
-    // Close browser
-    await this.closeBrowser();
-    
-    // Remove all listeners
-    this.removeAllListeners();
-    
-    logger.info('Browser cleanup completed');
   }
 }
 
@@ -347,7 +127,7 @@ export class ResourcePool<T> extends EventEmitter {
     this.maxSize = maxSize;
     this.createResource = createResource;
     this.destroyResource = destroyResource;
-    
+
     logger.debug('ResourcePool created', { maxSize });
   }
 
@@ -356,7 +136,7 @@ export class ResourcePool<T> extends EventEmitter {
     if (this.available.length > 0) {
       const resource = this.available.pop()!;
       this.inUse.add(resource);
-      logger.debug('Resource acquired from pool', { 
+      logger.debug('Resource acquired from pool', {
         availableCount: this.available.length,
         inUseCount: this.inUse.size
       });
@@ -368,7 +148,7 @@ export class ResourcePool<T> extends EventEmitter {
       try {
         const resource = await this.createResource();
         this.inUse.add(resource);
-        logger.debug('New resource created', { 
+        logger.debug('New resource created', {
           availableCount: this.available.length,
           inUseCount: this.inUse.size
         });
@@ -381,12 +161,14 @@ export class ResourcePool<T> extends EventEmitter {
     }
 
     // Wait for resource to become available
-    return new Promise<T>((resolve) => {
+    return new Promise<T>(resolve => {
       this.once('resource_released', () => {
-        this.acquire().then(resolve).catch(() => {
-          // Retry on error
-          setTimeout(() => this.acquire().then(resolve), 100);
-        });
+        this.acquire()
+          .then(resolve)
+          .catch(() => {
+            // Retry on error
+            setTimeout(() => this.acquire().then(resolve), 100);
+          });
       });
     });
   }
@@ -399,12 +181,12 @@ export class ResourcePool<T> extends EventEmitter {
 
     this.inUse.delete(resource);
     this.available.push(resource);
-    
-    logger.debug('Resource released', { 
+
+    logger.debug('Resource released', {
       availableCount: this.available.length,
       inUseCount: this.inUse.size
     });
-    
+
     this.emit('resource_released', { resource });
   }
 
@@ -416,7 +198,7 @@ export class ResourcePool<T> extends EventEmitter {
 
     // Destroy all resources
     const allResources = [...this.available, ...this.inUse];
-    const destroyPromises = allResources.map(async (resource) => {
+    const destroyPromises = allResources.map(async resource => {
       try {
         await this.destroyResource(resource);
       } catch (error) {
@@ -425,11 +207,11 @@ export class ResourcePool<T> extends EventEmitter {
     });
 
     await Promise.allSettled(destroyPromises);
-    
+
     this.available.length = 0;
     this.inUse.clear();
     this.removeAllListeners();
-    
+
     logger.info('Resource pool destroyed');
   }
 
@@ -445,4 +227,8 @@ export class ResourcePool<T> extends EventEmitter {
 
 // Export singleton instances
 export const cleanupManager = new CleanupManager();
-export const browserManager = new BrowserManager(cleanupManager);
+
+// Register browser manager with cleanup manager
+browserManager.registerCleanup(cleanupManager);
+
+export { browserManager };

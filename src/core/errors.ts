@@ -10,7 +10,7 @@ export abstract class VisualMCPError extends Error {
     message: string,
     code: string,
     component: string,
-    public readonly cause?: Error
+    public override readonly cause?: Error
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -46,31 +46,19 @@ export class ScreenshotError extends VisualMCPError {
 
 export class ScreenshotTimeoutError extends ScreenshotError {
   constructor(url: string, timeout: number, cause?: Error) {
-    super(
-      `Screenshot timeout after ${timeout}ms for URL: ${url}`,
-      'SCREENSHOT_TIMEOUT',
-      cause
-    );
+    super(`Screenshot timeout after ${timeout}ms for URL: ${url}`, 'SCREENSHOT_TIMEOUT', cause);
   }
 }
 
 export class ScreenshotNavigationError extends ScreenshotError {
   constructor(url: string, cause?: Error) {
-    super(
-      `Failed to navigate to URL: ${url}`,
-      'SCREENSHOT_NAVIGATION_ERROR',
-      cause
-    );
+    super(`Failed to navigate to URL: ${url}`, 'SCREENSHOT_NAVIGATION_ERROR', cause);
   }
 }
 
 export class ScreenshotCaptureError extends ScreenshotError {
   constructor(reason: string, cause?: Error) {
-    super(
-      `Failed to capture screenshot: ${reason}`,
-      'SCREENSHOT_CAPTURE_ERROR',
-      cause
-    );
+    super(`Failed to capture screenshot: ${reason}`, 'SCREENSHOT_CAPTURE_ERROR', cause);
   }
 }
 
@@ -85,22 +73,14 @@ export class ComparisonError extends VisualMCPError {
 
 export class ImageLoadError extends ComparisonError {
   constructor(imagePath: string, cause?: Error) {
-    super(
-      `Failed to load image: ${imagePath}`,
-      'IMAGE_LOAD_ERROR',
-      cause
-    );
+    super(`Failed to load image: ${imagePath}`, 'IMAGE_LOAD_ERROR', cause);
   }
 }
 
 export class ImageFormatError extends ComparisonError {
   constructor(imagePath: string, expectedFormat?: string, cause?: Error) {
     const formatInfo = expectedFormat ? ` (expected: ${expectedFormat})` : '';
-    super(
-      `Invalid image format: ${imagePath}${formatInfo}`,
-      'IMAGE_FORMAT_ERROR',
-      cause
-    );
+    super(`Invalid image format: ${imagePath}${formatInfo}`, 'IMAGE_FORMAT_ERROR', cause);
   }
 }
 
@@ -127,10 +107,7 @@ export class AnalysisError extends VisualMCPError {
 
 export class DiffImageNotFoundError extends AnalysisError {
   constructor(diffImagePath: string) {
-    super(
-      `Diff image not found: ${diffImagePath}`,
-      'DIFF_IMAGE_NOT_FOUND'
-    );
+    super(`Diff image not found: ${diffImagePath}`, 'DIFF_IMAGE_NOT_FOUND');
   }
 }
 
@@ -145,10 +122,7 @@ export class MonitoringError extends VisualMCPError {
 
 export class SessionNotFoundError extends MonitoringError {
   constructor(sessionId: string) {
-    super(
-      `Monitoring session not found: ${sessionId}`,
-      'SESSION_NOT_FOUND'
-    );
+    super(`Monitoring session not found: ${sessionId}`, 'SESSION_NOT_FOUND');
   }
 }
 
@@ -163,10 +137,7 @@ export class SessionLimitExceededError extends MonitoringError {
 
 export class ReferenceImageNotFoundError extends MonitoringError {
   constructor(referenceImagePath: string) {
-    super(
-      `Reference image not found: ${referenceImagePath}`,
-      'REFERENCE_IMAGE_NOT_FOUND'
-    );
+    super(`Reference image not found: ${referenceImagePath}`, 'REFERENCE_IMAGE_NOT_FOUND');
   }
 }
 
@@ -181,10 +152,7 @@ export class ConfigurationError extends VisualMCPError {
 
 export class InvalidConfigurationError extends ConfigurationError {
   constructor(field: string, value: any, reason: string) {
-    super(
-      `Invalid configuration for ${field}: ${value} - ${reason}`,
-      'INVALID_CONFIGURATION'
-    );
+    super(`Invalid configuration for ${field}: ${value} - ${reason}`, 'INVALID_CONFIGURATION');
   }
 }
 
@@ -199,31 +167,19 @@ export class FileSystemError extends VisualMCPError {
 
 export class DirectoryCreationError extends FileSystemError {
   constructor(path: string, cause?: Error) {
-    super(
-      `Failed to create directory: ${path}`,
-      'DIRECTORY_CREATION_ERROR',
-      cause
-    );
+    super(`Failed to create directory: ${path}`, 'DIRECTORY_CREATION_ERROR', cause);
   }
 }
 
 export class FileWriteError extends FileSystemError {
   constructor(path: string, cause?: Error) {
-    super(
-      `Failed to write file: ${path}`,
-      'FILE_WRITE_ERROR',
-      cause
-    );
+    super(`Failed to write file: ${path}`, 'FILE_WRITE_ERROR', cause);
   }
 }
 
 export class FileReadError extends FileSystemError {
   constructor(path: string, cause?: Error) {
-    super(
-      `Failed to read file: ${path}`,
-      'FILE_READ_ERROR',
-      cause
-    );
+    super(`Failed to read file: ${path}`, 'FILE_READ_ERROR', cause);
   }
 }
 
@@ -252,21 +208,13 @@ export class BrowserError extends VisualMCPError {
 
 export class BrowserLaunchError extends BrowserError {
   constructor(cause?: Error) {
-    super(
-      'Failed to launch browser',
-      'BROWSER_LAUNCH_ERROR',
-      cause
-    );
+    super('Failed to launch browser', 'BROWSER_LAUNCH_ERROR', cause);
   }
 }
 
 export class BrowserConnectionError extends BrowserError {
   constructor(cause?: Error) {
-    super(
-      'Failed to connect to browser',
-      'BROWSER_CONNECTION_ERROR',
-      cause
-    );
+    super('Failed to connect to browser', 'BROWSER_CONNECTION_ERROR', cause);
   }
 }
 
@@ -280,7 +228,11 @@ export function isVisualMCPError(error: unknown): error is VisualMCPError {
 /**
  * Utility function to wrap unknown errors
  */
-export function wrapError(error: unknown, component: string, code: string = 'UNKNOWN_ERROR'): VisualMCPError {
+export function wrapError(
+  error: unknown,
+  component: string,
+  code: string = 'UNKNOWN_ERROR'
+): VisualMCPError {
   if (isVisualMCPError(error)) {
     return error;
   }
@@ -288,9 +240,9 @@ export function wrapError(error: unknown, component: string, code: string = 'UNK
   const message = error instanceof Error ? error.message : String(error);
   const cause = error instanceof Error ? error : undefined;
 
-  return new class extends VisualMCPError {
+  return new (class extends VisualMCPError {
     constructor() {
       super(message, code, component, cause);
     }
-  }();
+  })();
 }

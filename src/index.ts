@@ -17,17 +17,23 @@ import { ComparisonEngine } from './comparison/differ.js';
 import { FeedbackGenerator } from './analysis/feedback-generator.js';
 import { MonitoringManager } from './screenshot/monitoring.js';
 
-// Type imports
-import { 
-  TakeScreenshotParamsSchema,
-  CompareVisualsParamsSchema,
-  AnalyzeFeedbackParamsSchema,
-  StartMonitoringParamsSchema,
-  StopMonitoringParamsSchema
-} from './types/index.js';
-
 // Interface imports
-import { SERVICE_TOKENS } from './interfaces/index.js';
+import {
+  SERVICE_TOKENS,
+  IScreenshotEngine,
+  IComparisonEngine,
+  IFeedbackAnalyzer,
+  IMonitoringManager
+} from './interfaces/index.js';
+
+// Handler imports
+import {
+  handleTakeScreenshot,
+  handleCompareVisuals,
+  handleAnalyzeFeedback,
+  handleStartMonitoring,
+  handleStopMonitoring
+} from './handlers/index.js';
 
 const logger = createLogger('MCPServer');
 
@@ -46,12 +52,12 @@ class VisualMCPServer {
     this.server = new Server(
       {
         name: 'visual-mcp-server',
-        version: '1.0.0',
+        version: '1.0.0'
       },
       {
         capabilities: {
-          tools: {},
-        },
+          tools: {}
+        }
       }
     );
 
@@ -67,26 +73,30 @@ class VisualMCPServer {
 
     // Register core services as singletons
     container.registerInstance(SERVICE_TOKENS.BROWSER_MANAGER, browserManager);
-    
-    container.registerSingleton(SERVICE_TOKENS.SCREENSHOT_ENGINE, () => {
+
+    container.registerSingleton<IScreenshotEngine>(SERVICE_TOKENS.SCREENSHOT_ENGINE, () => {
       logger.debug('Creating ScreenshotEngine instance');
       return new ScreenshotEngine(browserManager);
     });
 
-    container.registerSingleton(SERVICE_TOKENS.COMPARISON_ENGINE, () => {
+    container.registerSingleton<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE, () => {
       logger.debug('Creating ComparisonEngine instance');
       return new ComparisonEngine();
     });
 
-    container.registerSingleton(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
+    container.registerSingleton<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
       logger.debug('Creating FeedbackGenerator instance');
       return new FeedbackGenerator();
     });
 
-    container.registerSingleton(SERVICE_TOKENS.MONITORING_MANAGER, () => {
+    container.registerSingleton<IMonitoringManager>(SERVICE_TOKENS.MONITORING_MANAGER, () => {
       logger.debug('Creating MonitoringManager instance');
-      const screenshotEngine = container.resolve(SERVICE_TOKENS.SCREENSHOT_ENGINE);
-      const comparisonEngine = container.resolve(SERVICE_TOKENS.COMPARISON_ENGINE);
+      const screenshotEngine = container.resolve<IScreenshotEngine>(
+        SERVICE_TOKENS.SCREENSHOT_ENGINE
+      );
+      const comparisonEngine = container.resolve<IComparisonEngine>(
+        SERVICE_TOKENS.COMPARISON_ENGINE
+      );
       return new MonitoringManager(screenshotEngine, comparisonEngine);
     });
 
@@ -178,17 +188,24 @@ class VisualMCPServer {
         },
         {
           name: 'analyze_ui_feedback',
-          description: 'Generate actionable feedback for UI improvements based on visual differences',
+          description:
+            'Generate actionable feedback for UI improvements based on visual differences',
           inputSchema: {
             type: 'object',
             properties: {
-              diffImagePath: { type: 'string', description: 'Path to difference visualization image' },
+              diffImagePath: {
+                type: 'string',
+                description: 'Path to difference visualization image'
+              },
               options: {
                 type: 'object',
                 properties: {
-                  priority: { 
+                  priority: {
                     type: 'array',
-                    items: { type: 'string', enum: ['layout', 'colors', 'typography', 'spacing', 'content'] }
+                    items: {
+                      type: 'string',
+                      enum: ['layout', 'colors', 'typography', 'spacing', 'content']
+                    }
                   },
                   context: { type: 'string' },
                   suggestionsType: { type: 'string', enum: ['css', 'general', 'both'] }
@@ -233,47 +250,47 @@ class VisualMCPServer {
       ]
     }));
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async request => {
       const startTime = Date.now();
-      logger.info('Tool call received', { 
+      logger.info('Tool call received', {
         tool: request.params.name,
-        requestId: request.id
+        requestId: request.params._meta?.progressToken
       });
 
       try {
         switch (request.params.name) {
           case 'take_screenshot':
-            return await this.handleTakeScreenshot(request);
-          
+            return await handleTakeScreenshot(request);
+
           case 'compare_visuals':
-            return await this.handleCompareVisuals(request);
-          
+            return await handleCompareVisuals(request);
+
           case 'analyze_ui_feedback':
-            return await this.handleAnalyzeFeedback(request);
-          
+            return await handleAnalyzeFeedback(request);
+
           case 'start_monitoring':
-            return await this.handleStartMonitoring(request);
-          
+            return await handleStartMonitoring(request);
+
           case 'stop_monitoring':
-            return await this.handleStopMonitoring(request);
-          
+            return await handleStopMonitoring(request);
+
           default:
             throw new ValidationError(`Unknown tool: ${request.params.name}`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        logger.error('Tool call failed', error as Error, { 
+        logger.error('Tool call failed', error as Error, {
           tool: request.params.name,
-          requestId: request.id,
+          requestId: request.params._meta?.progressToken,
           duration
         });
 
         return this.formatErrorResponse(error);
       } finally {
         const duration = Date.now() - startTime;
-        logger.debug('Tool call completed', { 
+        logger.debug('Tool call completed', {
           tool: request.params.name,
-          requestId: request.id,
+          requestId: request.params._meta?.progressToken,
           duration
         });
       }
@@ -282,176 +299,54 @@ class VisualMCPServer {
     logger.debug('MCP tool handlers setup completed');
   }
 
-  private async handleTakeScreenshot(request: any) {
-    const params = TakeScreenshotParamsSchema.parse(request.params.arguments);
-    const screenshotEngine = container.resolve(SERVICE_TOKENS.SCREENSHOT_ENGINE);
-    
-    logger.debug('Taking screenshot', { 
-      targetType: params.target.type,
-      format: params.options?.format
-    });
-
-    const result = await screenshotEngine.takeScreenshot(params.target, params.options);
-    
-    logger.info('Screenshot taken successfully', { 
-      filepath: result.filepath,
-      size: result.size,
-      dimensions: `${result.width}x${result.height}`
-    });
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
-  }
-
-  private async handleCompareVisuals(request: any) {
-    const params = CompareVisualsParamsSchema.parse(request.params.arguments);
-    const comparisonEngine = container.resolve(SERVICE_TOKENS.COMPARISON_ENGINE);
-    
-    logger.debug('Comparing images', { 
-      currentImage: params.currentImage,
-      referenceImage: params.referenceImage,
-      tolerance: params.options?.tolerance
-    });
-
-    const result = await comparisonEngine.compare(
-      params.currentImage,
-      params.referenceImage,
-      params.options
-    );
-    
-    logger.info('Visual comparison completed', { 
-      differencePercentage: result.differencePercentage,
-      isMatch: result.isMatch,
-      regionsCount: result.regions.length
-    });
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
-  }
-
-  private async handleAnalyzeFeedback(request: any) {
-    const params = AnalyzeFeedbackParamsSchema.parse(request.params.arguments);
-    const feedbackAnalyzer = container.resolve(SERVICE_TOKENS.FEEDBACK_ANALYZER);
-    
-    logger.debug('Analyzing feedback', { 
-      diffImagePath: params.diffImagePath,
-      priority: params.options?.priority,
-      suggestionsType: params.options?.suggestionsType
-    });
-
-    const result = await feedbackAnalyzer.analyzeDifferences(
-      params.diffImagePath,
-      params.options
-    );
-    
-    logger.info('Feedback analysis completed', { 
-      issuesCount: result.issues.length,
-      suggestionsCount: result.suggestions.length,
-      confidence: result.confidence
-    });
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
-  }
-
-  private async handleStartMonitoring(request: any) {
-    const params = StartMonitoringParamsSchema.parse(request.params.arguments);
-    const monitoringManager = container.resolve(SERVICE_TOKENS.MONITORING_MANAGER);
-    
-    logger.debug('Starting monitoring', { 
-      targetType: params.target.type,
-      interval: params.interval,
-      autoFeedback: params.autoFeedback
-    });
-
-    const sessionId = await monitoringManager.startMonitoring(params);
-    
-    logger.info('Monitoring started', { 
-      sessionId,
-      interval: params.interval
-    });
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({ 
-          sessionId, 
-          message: 'Monitoring started successfully' 
-        }, null, 2)
-      }]
-    };
-  }
-
-  private async handleStopMonitoring(request: any) {
-    const params = StopMonitoringParamsSchema.parse(request.params.arguments);
-    const monitoringManager = container.resolve(SERVICE_TOKENS.MONITORING_MANAGER);
-    
-    logger.debug('Stopping monitoring', { sessionId: params.sessionId });
-
-    const summary = await monitoringManager.stopMonitoring(params.sessionId);
-    
-    logger.info('Monitoring stopped', { 
-      sessionId: params.sessionId,
-      duration: summary.duration,
-      screenshotsCount: summary.totalScreenshots
-    });
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(summary, null, 2)
-      }]
-    };
-  }
-
   private formatErrorResponse(error: unknown) {
     if (isVisualMCPError(error)) {
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            error: {
-              type: error.name,
-              code: error.code,
-              message: error.message,
-              component: error.component,
-              timestamp: error.timestamp
-            }
-          }, null, 2)
-        }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                error: {
+                  type: error.name,
+                  code: error.code,
+                  message: error.message,
+                  component: error.component,
+                  timestamp: error.timestamp
+                }
+              },
+              null,
+              2
+            )
+          }
+        ],
         isError: true
       };
     }
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({ 
-          error: {
-            type: 'UnknownError',
-            message: errorMessage
-          }
-        }, null, 2)
-      }],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              error: {
+                type: 'UnknownError',
+                message: errorMessage
+              }
+            },
+            null,
+            2
+          )
+        }
+      ],
       isError: true
     };
   }
 
   private setupErrorHandling(): void {
-    this.server.onerror = (error) => {
+    this.server.onerror = error => {
       logger.error('MCP Server error', error);
     };
 
@@ -474,7 +369,7 @@ class VisualMCPServer {
 
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      
+
       logger.info('Visual MCP Server running on stdio');
     } catch (error) {
       logger.error('Failed to start MCP server', error as Error);
@@ -486,8 +381,8 @@ class VisualMCPServer {
 // Main execution
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new VisualMCPServer();
-  
-  server.run().catch((error) => {
+
+  server.run().catch(error => {
     logger.error('Fatal server error', error);
     process.exit(1);
   });

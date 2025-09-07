@@ -9,7 +9,7 @@ const ConfigSchema = z.object({
   outputDir: z.string().default(path.join(process.cwd(), 'screenshots')),
   comparisonsDir: z.string().default(path.join(process.cwd(), 'comparisons')),
   tempDir: z.string().default(path.join(process.cwd(), 'temp')),
-  
+
   // Screenshot settings
   screenshot: z.object({
     defaultFormat: z.enum(['png', 'jpeg']).default('png'),
@@ -21,15 +21,15 @@ const ConfigSchema = z.object({
     timeout: z.number().int().positive().default(30000), // 30 seconds
     waitForNetworkIdle: z.boolean().default(true)
   }),
-  
-  // Comparison settings  
+
+  // Comparison settings
   comparison: z.object({
     defaultTolerance: z.number().min(0).max(100).default(5),
     defaultThreshold: z.number().min(0).max(1).default(0.1),
     minRegionSize: z.number().int().positive().default(10),
     maxDiffPercentage: z.number().min(0).max(100).default(50)
   }),
-  
+
   // Monitoring settings
   monitoring: z.object({
     defaultInterval: z.number().int().min(1).max(300).default(5),
@@ -37,22 +37,24 @@ const ConfigSchema = z.object({
     significantChangeThreshold: z.number().min(0).max(100).default(2),
     maxScreenshotsPerSession: z.number().int().positive().default(1000)
   }),
-  
+
   // Browser settings
   browser: z.object({
     headless: z.boolean().default(true),
     timeout: z.number().int().positive().default(30000),
-    args: z.array(z.string()).default([
-      '--no-sandbox',
-      '--disable-setuid-sandbox', 
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu'
-    ])
+    args: z
+      .array(z.string())
+      .default([
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ])
   }),
-  
+
   // Logging settings
   logging: z.object({
     level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -87,29 +89,43 @@ export class ConfigManager {
       outputDir: process.env.VISUAL_MCP_OUTPUT_DIR,
       comparisonsDir: process.env.VISUAL_MCP_COMPARISONS_DIR,
       tempDir: process.env.VISUAL_MCP_TEMP_DIR,
-      
+
       screenshot: {
         defaultFormat: process.env.VISUAL_MCP_SCREENSHOT_FORMAT as 'png' | 'jpeg',
-        defaultQuality: process.env.VISUAL_MCP_SCREENSHOT_QUALITY ? parseInt(process.env.VISUAL_MCP_SCREENSHOT_QUALITY) : undefined,
-        timeout: process.env.VISUAL_MCP_SCREENSHOT_TIMEOUT ? parseInt(process.env.VISUAL_MCP_SCREENSHOT_TIMEOUT) : undefined,
+        defaultQuality: process.env.VISUAL_MCP_SCREENSHOT_QUALITY
+          ? parseInt(process.env.VISUAL_MCP_SCREENSHOT_QUALITY)
+          : undefined,
+        timeout: process.env.VISUAL_MCP_SCREENSHOT_TIMEOUT
+          ? parseInt(process.env.VISUAL_MCP_SCREENSHOT_TIMEOUT)
+          : undefined,
         waitForNetworkIdle: process.env.VISUAL_MCP_WAIT_NETWORK_IDLE === 'true'
       },
-      
+
       comparison: {
-        defaultTolerance: process.env.VISUAL_MCP_TOLERANCE ? parseFloat(process.env.VISUAL_MCP_TOLERANCE) : undefined,
-        defaultThreshold: process.env.VISUAL_MCP_THRESHOLD ? parseFloat(process.env.VISUAL_MCP_THRESHOLD) : undefined
+        defaultTolerance: process.env.VISUAL_MCP_TOLERANCE
+          ? parseFloat(process.env.VISUAL_MCP_TOLERANCE)
+          : undefined,
+        defaultThreshold: process.env.VISUAL_MCP_THRESHOLD
+          ? parseFloat(process.env.VISUAL_MCP_THRESHOLD)
+          : undefined
       },
-      
+
       monitoring: {
-        defaultInterval: process.env.VISUAL_MCP_MONITOR_INTERVAL ? parseInt(process.env.VISUAL_MCP_MONITOR_INTERVAL) : undefined,
-        maxSessions: process.env.VISUAL_MCP_MAX_SESSIONS ? parseInt(process.env.VISUAL_MCP_MAX_SESSIONS) : undefined
+        defaultInterval: process.env.VISUAL_MCP_MONITOR_INTERVAL
+          ? parseInt(process.env.VISUAL_MCP_MONITOR_INTERVAL)
+          : undefined,
+        maxSessions: process.env.VISUAL_MCP_MAX_SESSIONS
+          ? parseInt(process.env.VISUAL_MCP_MAX_SESSIONS)
+          : undefined
       },
-      
+
       browser: {
         headless: process.env.VISUAL_MCP_HEADLESS !== 'false',
-        timeout: process.env.VISUAL_MCP_BROWSER_TIMEOUT ? parseInt(process.env.VISUAL_MCP_BROWSER_TIMEOUT) : undefined
+        timeout: process.env.VISUAL_MCP_BROWSER_TIMEOUT
+          ? parseInt(process.env.VISUAL_MCP_BROWSER_TIMEOUT)
+          : undefined
       },
-      
+
       logging: {
         level: process.env.VISUAL_MCP_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error',
         enableFileLogging: process.env.VISUAL_MCP_FILE_LOGGING === 'true',
@@ -119,7 +135,7 @@ export class ConfigManager {
 
     // Remove undefined values
     const cleanConfig = this.removeUndefined(envConfig);
-    
+
     // Validate and apply defaults
     try {
       return ConfigSchema.parse(cleanConfig);

@@ -1,6 +1,6 @@
-import { 
-  ScreenshotTarget, 
-  ScreenshotOptions, 
+import {
+  ScreenshotTarget,
+  ScreenshotOptions,
   ScreenshotResult,
   ComparisonOptions,
   ComparisonResult,
@@ -23,7 +23,7 @@ export interface IScreenshotEngine {
 }
 
 /**
- * Interface for image comparison functionality  
+ * Interface for image comparison functionality
  */
 export interface IComparisonEngine {
   compare(
@@ -41,10 +41,7 @@ export interface IComparisonEngine {
  * Interface for feedback analysis functionality
  */
 export interface IFeedbackAnalyzer {
-  analyzeDifferences(
-    diffImagePath: string,
-    options?: FeedbackOptions
-  ): Promise<FeedbackResult>;
+  analyzeDifferences(diffImagePath: string, options?: FeedbackOptions): Promise<FeedbackResult>;
 }
 
 /**
@@ -66,7 +63,7 @@ export interface IMonitoringManager {
  */
 export interface IBrowserManager {
   getBrowser(): Promise<any>; // Browser from puppeteer
-  createPage(): Promise<any>; // Page from puppeteer  
+  createPage(): Promise<any>; // Page from puppeteer
   closePage(page: any): Promise<void>;
   cleanup(): Promise<void>;
   isHealthy(): Promise<boolean>;
@@ -148,11 +145,14 @@ export interface IHealthChecker {
 
 export interface HealthStatus {
   healthy: boolean;
-  checks: Record<string, {
-    status: 'pass' | 'fail';
-    message?: string;
-    timestamp: string;
-  }>;
+  checks: Record<
+    string,
+    {
+      status: 'pass' | 'fail';
+      message?: string;
+      timestamp: string;
+    }
+  >;
   uptime: number;
   version: string;
 }

@@ -27,7 +27,7 @@ export class Logger {
     this.logLevel = loggingConfig.level;
     this.enableFileLogging = loggingConfig.enableFileLogging;
     this.logFile = loggingConfig.logFile;
-    
+
     if (this.enableFileLogging) {
       this.ensureLogDirectory();
     }
@@ -64,24 +64,24 @@ export class Logger {
     const level = entry.level.toUpperCase().padEnd(5);
     const component = entry.component.padEnd(15);
     let message = `[${timestamp}] ${level} ${component} ${entry.message}`;
-    
+
     if (entry.data) {
       message += ` | Data: ${JSON.stringify(entry.data)}`;
     }
-    
+
     if (entry.error) {
       message += ` | Error: ${entry.error.message}`;
       if (entry.error.stack && entry.level === 'error') {
         message += `\n${entry.error.stack}`;
       }
     }
-    
+
     return message;
   }
 
   private async writeToFile(entry: LogEntry): Promise<void> {
     if (!this.enableFileLogging) return;
-    
+
     try {
       const message = this.formatMessage(entry) + '\n';
       await fs.appendFile(this.logFile, message);
@@ -90,7 +90,13 @@ export class Logger {
     }
   }
 
-  private log(level: LogLevel, component: string, message: string, data?: any, error?: Error): void {
+  private log(
+    level: LogLevel,
+    component: string,
+    message: string,
+    data?: any,
+    error?: Error
+  ): void {
     if (!this.shouldLog(level)) return;
 
     const entry: LogEntry = {
@@ -147,8 +153,10 @@ export class Logger {
     return {
       debug: (message: string, data?: any) => this.debug(component, message, data),
       info: (message: string, data?: any) => this.info(component, message, data),
-      warn: (message: string, data?: any, error?: Error) => this.warn(component, message, data, error),
-      error: (message: string, error?: Error, data?: any) => this.error(component, message, error, data)
+      warn: (message: string, data?: any, error?: Error) =>
+        this.warn(component, message, data, error),
+      error: (message: string, error?: Error, data?: any) =>
+        this.error(component, message, error, data)
     };
   }
 }

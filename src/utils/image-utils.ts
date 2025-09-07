@@ -14,13 +14,13 @@ export class ImageProcessor implements IImageProcessor {
   async loadImage(imagePath: string): Promise<PNG> {
     try {
       logger.debug('Loading image', { imagePath });
-      
-      if (!await fs.pathExists(imagePath)) {
+
+      if (!(await fs.pathExists(imagePath))) {
         throw new FileReadError(imagePath);
       }
 
       const buffer = await fs.readFile(imagePath);
-      
+
       try {
         // Try to parse as PNG directly
         return PNG.sync.read(buffer);
@@ -38,10 +38,10 @@ export class ImageProcessor implements IImageProcessor {
   async saveImage(imageData: PNG, outputPath: string): Promise<void> {
     try {
       logger.debug('Saving image', { outputPath });
-      
+
       const buffer = PNG.sync.write(imageData);
       await fs.writeFile(outputPath, buffer);
-      
+
       logger.info('Image saved successfully', { outputPath, size: buffer.length });
     } catch (error) {
       logger.error('Failed to save image', error as Error, { outputPath });
@@ -52,9 +52,9 @@ export class ImageProcessor implements IImageProcessor {
   async resizeImage(imagePath: string, width: number, height: number): Promise<string> {
     try {
       logger.debug('Resizing image', { imagePath, width, height });
-      
+
       const outputPath = this.generateTempPath(imagePath, `_resized_${width}x${height}`);
-      
+
       await sharp(imagePath)
         .resize(width, height, {
           fit: 'contain',
@@ -62,13 +62,13 @@ export class ImageProcessor implements IImageProcessor {
         })
         .png()
         .toFile(outputPath);
-      
-      logger.info('Image resized successfully', { 
-        inputPath: imagePath, 
-        outputPath, 
-        dimensions: { width, height } 
+
+      logger.info('Image resized successfully', {
+        inputPath: imagePath,
+        outputPath,
+        dimensions: { width, height }
       });
-      
+
       return outputPath;
     } catch (error) {
       logger.error('Failed to resize image', error as Error, { imagePath, width, height });
@@ -76,28 +76,33 @@ export class ImageProcessor implements IImageProcessor {
     }
   }
 
-  async convertFormat(imagePath: string, format: 'png' | 'jpeg', outputPath?: string): Promise<string> {
+  async convertFormat(
+    imagePath: string,
+    format: 'png' | 'jpeg',
+    outputPath?: string
+  ): Promise<string> {
     try {
       logger.debug('Converting image format', { imagePath, format, outputPath });
-      
-      const finalOutputPath = outputPath || this.generateTempPath(imagePath, `_converted.${format}`);
-      
+
+      const finalOutputPath =
+        outputPath || this.generateTempPath(imagePath, `_converted.${format}`);
+
       const pipeline = sharp(imagePath);
-      
+
       if (format === 'jpeg') {
         pipeline.jpeg({ quality: 90 });
       } else {
         pipeline.png();
       }
-      
+
       await pipeline.toFile(finalOutputPath);
-      
-      logger.info('Image format converted', { 
-        inputPath: imagePath, 
-        outputPath: finalOutputPath, 
-        format 
+
+      logger.info('Image format converted', {
+        inputPath: imagePath,
+        outputPath: finalOutputPath,
+        format
       });
-      
+
       return finalOutputPath;
     } catch (error) {
       logger.error('Failed to convert image format', error as Error, { imagePath, format });
@@ -113,21 +118,21 @@ export class ImageProcessor implements IImageProcessor {
   }> {
     try {
       logger.debug('Getting image metadata', { imagePath });
-      
+
       const [metadata, stats] = await Promise.all([
         sharp(imagePath).metadata(),
         fs.stat(imagePath)
       ]);
-      
+
       const result = {
         width: metadata.width || 0,
         height: metadata.height || 0,
         format: metadata.format || 'unknown',
         size: stats.size
       };
-      
+
       logger.debug('Image metadata retrieved', { imagePath, metadata: result });
-      
+
       return result;
     } catch (error) {
       logger.error('Failed to get image metadata', error as Error, { imagePath });
@@ -149,9 +154,12 @@ export class ImageProcessor implements IImageProcessor {
   async prepareImagesForComparison(
     currentImagePath: string,
     referenceImagePath: string
-  ): Promise<{ current: { path: string; isTemporary: boolean }, reference: { path: string; isTemporary: boolean } }> {
+  ): Promise<{
+    current: { path: string; isTemporary: boolean };
+    reference: { path: string; isTemporary: boolean };
+  }> {
     logger.debug('Preparing images for comparison', { currentImagePath, referenceImagePath });
-    
+
     const [currentMetadata, referenceMetadata] = await Promise.all([
       this.getImageMetadata(currentImagePath),
       this.getImageMetadata(referenceImagePath)
@@ -163,9 +171,10 @@ export class ImageProcessor implements IImageProcessor {
     };
 
     // Check if images have different dimensions
-    if (currentMetadata.width !== referenceMetadata.width || 
-        currentMetadata.height !== referenceMetadata.height) {
-      
+    if (
+      currentMetadata.width !== referenceMetadata.width ||
+      currentMetadata.height !== referenceMetadata.height
+    ) {
       logger.info('Images have different dimensions, resizing', {
         current: { width: currentMetadata.width, height: currentMetadata.height },
         reference: { width: referenceMetadata.width, height: referenceMetadata.height }
@@ -197,13 +206,13 @@ export class ImageProcessor implements IImageProcessor {
    */
   async cleanupTempFiles(files: Array<{ path: string; isTemporary: boolean }>): Promise<void> {
     const tempFiles = files.filter(f => f.isTemporary).map(f => f.path);
-    
+
     if (tempFiles.length === 0) return;
-    
+
     logger.debug('Cleaning up temporary files', { files: tempFiles });
-    
+
     await Promise.allSettled(
-      tempFiles.map(async (file) => {
+      tempFiles.map(async file => {
         try {
           await fs.remove(file);
           logger.debug('Temporary file removed', { file });
@@ -223,28 +232,29 @@ export class ImageUtils {
    * Apply ignore regions by masking them to a neutral color
    */
   static applyIgnoreRegions(
-    currentPng: PNG, 
-    referencePng: PNG, 
-    ignoreRegions: Array<{ x: number, y: number, width: number, height: number }>
+    currentPng: PNG,
+    referencePng: PNG,
+    ignoreRegions: Array<{ x: number; y: number; width: number; height: number }>
   ): void {
     logger.debug('Applying ignore regions', { regionsCount: ignoreRegions.length });
-    
+
     for (const region of ignoreRegions) {
       for (let y = region.y; y < region.y + region.height && y < currentPng.height; y++) {
         for (let x = region.x; x < region.x + region.width && x < currentPng.width; x++) {
           const idx = (currentPng.width * y + x) << 2;
-          
+
           // Set both images to the same neutral color in ignore regions
           const neutralColor = [128, 128, 128, 255]; // Gray
-          
+
           for (let i = 0; i < 4; i++) {
-            currentPng.data[idx + i] = neutralColor[i];
-            referencePng.data[idx + i] = neutralColor[i];
+            const colorValue = neutralColor[i] ?? 0;
+            currentPng.data[idx + i] = colorValue;
+            referencePng.data[idx + i] = colorValue;
           }
         }
       }
     }
-    
+
     logger.debug('Ignore regions applied successfully');
   }
 
@@ -259,7 +269,7 @@ export class ImageUtils {
       const r = data[i] || 0;
       const g = data[i + 1] || 0;
       const b = data[i + 2] || 0;
-      
+
       totalBrightness += (r + g + b) / 3;
       pixelCount++;
     }
@@ -286,7 +296,11 @@ export class ImageUtils {
   /**
    * Extract dominant colors from image data
    */
-  static extractDominantColors(data: Buffer, channels: number, maxColors: number = 5): Array<{ color: string; percentage: number }> {
+  static extractDominantColors(
+    data: Buffer,
+    channels: number,
+    maxColors: number = 5
+  ): Array<{ color: string; percentage: number }> {
     const colorCounts = new Map<string, number>();
     let totalPixels = 0;
 
@@ -309,7 +323,7 @@ export class ImageUtils {
         const r = (parts[0] || 0) * 32;
         const g = (parts[1] || 0) * 32;
         const b = (parts[2] || 0) * 32;
-        
+
         return {
           color: `rgb(${r}, ${g}, ${b})`,
           percentage: Math.round((count / totalPixels) * 100)

@@ -36,12 +36,12 @@ export class FileManager implements IFileManager {
   async writeFile(filePath: string, data: Buffer | string): Promise<void> {
     try {
       logger.debug('Writing file', { path: filePath, dataType: typeof data });
-      
+
       // Ensure parent directory exists
       await this.ensureDirectory(path.dirname(filePath));
-      
+
       await fs.writeFile(filePath, data);
-      
+
       const size = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data);
       logger.info('File written successfully', { path: filePath, size });
     } catch (error) {
@@ -75,8 +75,8 @@ export class FileManager implements IFileManager {
   async listFiles(directory: string, extension?: string): Promise<string[]> {
     try {
       logger.debug('Listing files', { directory, extension });
-      
-      if (!await this.exists(directory)) {
+
+      if (!(await this.exists(directory))) {
         logger.debug('Directory does not exist', { directory });
         return [];
       }
@@ -87,7 +87,7 @@ export class FileManager implements IFileManager {
         : files;
 
       const fullPaths = filteredFiles.map(file => path.join(directory, file));
-      
+
       // Filter to only include files (not directories)
       const actualFiles = [];
       for (const filePath of fullPaths) {
@@ -100,7 +100,7 @@ export class FileManager implements IFileManager {
           logger.warn('Error checking file stats', { path: filePath }, error as Error);
         }
       }
-      
+
       logger.debug('Files listed', { directory, count: actualFiles.length, extension });
       return actualFiles;
     } catch (error) {
@@ -116,14 +116,14 @@ export class FileManager implements IFileManager {
   }> {
     try {
       logger.debug('Getting file stats', { path: filePath });
-      
+
       const stats = await fs.stat(filePath);
       const result = {
         size: stats.size,
         created: stats.birthtime,
         modified: stats.mtime
       };
-      
+
       logger.debug('File stats retrieved', { path: filePath, stats: result });
       return result;
     } catch (error) {
@@ -140,7 +140,11 @@ export class PathUtils {
   /**
    * Generate a unique filename with timestamp
    */
-  static generateUniqueFileName(baseName: string, extension: string, includeTimestamp = true): string {
+  static generateUniqueFileName(
+    baseName: string,
+    extension: string,
+    includeTimestamp = true
+  ): string {
     const timestamp = includeTimestamp ? `_${Date.now()}` : '';
     const randomSuffix = Math.random().toString(36).substr(2, 6);
     return `${baseName}${timestamp}_${randomSuffix}.${extension}`;
@@ -190,12 +194,12 @@ export class CleanupUtils {
    * Clean up old files in directory based on age
    */
   static async cleanupOldFiles(
-    directory: string, 
+    directory: string,
     maxAge: number, // in milliseconds
     filePattern?: RegExp
   ): Promise<number> {
     logger.debug('Starting cleanup of old files', { directory, maxAge, filePattern });
-    
+
     try {
       const fileManager = new FileManager();
       const files = await fileManager.listFiles(directory);
@@ -215,8 +219,8 @@ export class CleanupUtils {
           if (age > maxAge) {
             await fileManager.deleteFile(filePath);
             deletedCount++;
-            logger.debug('Old file deleted', { 
-              path: filePath, 
+            logger.debug('Old file deleted', {
+              path: filePath,
               age: Math.round(age / 1000 / 60), // minutes
               maxAgeMinutes: Math.round(maxAge / 1000 / 60)
             });
@@ -226,10 +230,10 @@ export class CleanupUtils {
         }
       }
 
-      logger.info('Cleanup completed', { 
-        directory, 
-        deletedCount, 
-        totalFiles: files.length 
+      logger.info('Cleanup completed', {
+        directory,
+        deletedCount,
+        totalFiles: files.length
       });
 
       return deletedCount;
@@ -244,15 +248,15 @@ export class CleanupUtils {
    */
   static async cleanupTempFiles(tempDir: string): Promise<void> {
     logger.debug('Cleaning up temporary files', { tempDir });
-    
+
     const tempFilePattern = /^(temp_|monitor_|diff_|resized_|converted_)/;
     const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-    
+
     const deletedCount = await this.cleanupOldFiles(tempDir, maxAge, tempFilePattern);
-    
-    logger.info('Temporary files cleanup completed', { 
-      tempDir, 
-      deletedCount 
+
+    logger.info('Temporary files cleanup completed', {
+      tempDir,
+      deletedCount
     });
   }
 
@@ -260,19 +264,19 @@ export class CleanupUtils {
    * Clean up large files to free space
    */
   static async cleanupLargeFiles(
-    directory: string, 
+    directory: string,
     maxSize: number, // in bytes
     keepCount: number = 10
   ): Promise<void> {
     logger.debug('Cleaning up large files', { directory, maxSize, keepCount });
-    
+
     try {
       const fileManager = new FileManager();
       const files = await fileManager.listFiles(directory);
-      
+
       // Get file stats and sort by size (largest first)
       const fileStats = await Promise.all(
-        files.map(async (filePath) => {
+        files.map(async filePath => {
           try {
             const stats = await fileManager.getFileStats(filePath);
             return { path: filePath, ...stats };
@@ -282,9 +286,7 @@ export class CleanupUtils {
         })
       );
 
-      const validFiles = fileStats
-        .filter(Boolean)
-        .sort((a, b) => b!.size - a!.size);
+      const validFiles = fileStats.filter(Boolean).sort((a, b) => b!.size - a!.size);
 
       let deletedCount = 0;
       let totalFreed = 0;
@@ -296,18 +298,18 @@ export class CleanupUtils {
           await fileManager.deleteFile(file.path);
           deletedCount++;
           totalFreed += file.size;
-          
-          logger.debug('Large file deleted', { 
-            path: file.path, 
+
+          logger.debug('Large file deleted', {
+            path: file.path,
             size: Math.round(file.size / 1024 / 1024), // MB
             maxSizeMB: Math.round(maxSize / 1024 / 1024)
           });
         }
       }
 
-      logger.info('Large files cleanup completed', { 
-        directory, 
-        deletedCount, 
+      logger.info('Large files cleanup completed', {
+        directory,
+        deletedCount,
         totalFreedMB: Math.round(totalFreed / 1024 / 1024)
       });
     } catch (error) {

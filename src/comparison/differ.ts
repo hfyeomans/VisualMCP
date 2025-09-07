@@ -3,11 +3,11 @@ import path from 'path';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import sharp from 'sharp';
-import { 
-  ComparisonOptions, 
-  ComparisonResult, 
-  DifferenceRegion, 
-  ImageMetadata 
+import {
+  ComparisonOptions,
+  ComparisonResult,
+  DifferenceRegion,
+  ImageMetadata
 } from '../types/index.js';
 
 export class ComparisonEngine {
@@ -28,10 +28,10 @@ export class ComparisonEngine {
     options: ComparisonOptions = {}
   ): Promise<ComparisonResult> {
     // Validate input files exist
-    if (!await fs.pathExists(currentImagePath)) {
+    if (!(await fs.pathExists(currentImagePath))) {
       throw new Error(`Current image not found: ${currentImagePath}`);
     }
-    if (!await fs.pathExists(referenceImagePath)) {
+    if (!(await fs.pathExists(referenceImagePath))) {
       throw new Error(`Reference image not found: ${referenceImagePath}`);
     }
 
@@ -53,7 +53,7 @@ export class ComparisonEngine {
 
     // Create diff image
     const diffPng = new PNG({ width: currentPng.width, height: currentPng.height });
-    
+
     // Apply ignore regions by masking them
     if (options.ignoreRegions && options.ignoreRegions.length > 0) {
       this.applyIgnoreRegions(currentPng, referencePng, options.ignoreRegions);
@@ -116,7 +116,7 @@ export class ComparisonEngine {
   private async getImageMetadata(imagePath: string): Promise<ImageMetadata> {
     const stats = await fs.stat(imagePath);
     const metadata = await sharp(imagePath).metadata();
-    
+
     return {
       path: imagePath,
       width: metadata.width || 0,
@@ -132,16 +132,20 @@ export class ComparisonEngine {
     referenceImagePath: string,
     currentMetadata: ImageMetadata,
     referenceMetadata: ImageMetadata
-  ): Promise<{ current: { path: string; isTemporary: boolean }, reference: { path: string; isTemporary: boolean } }> {
+  ): Promise<{
+    current: { path: string; isTemporary: boolean };
+    reference: { path: string; isTemporary: boolean };
+  }> {
     const result = {
       current: { path: currentImagePath, isTemporary: false },
       reference: { path: referenceImagePath, isTemporary: false }
     };
 
     // Check if images have different dimensions
-    if (currentMetadata.width !== referenceMetadata.width || 
-        currentMetadata.height !== referenceMetadata.height) {
-      
+    if (
+      currentMetadata.width !== referenceMetadata.width ||
+      currentMetadata.height !== referenceMetadata.height
+    ) {
       // Determine target dimensions (use the larger image as reference)
       const targetWidth = Math.max(currentMetadata.width, referenceMetadata.width);
       const targetHeight = Math.max(currentMetadata.height, referenceMetadata.height);
@@ -156,7 +160,7 @@ export class ComparisonEngine {
           })
           .png()
           .toFile(tempCurrentPath);
-        
+
         result.current = { path: tempCurrentPath, isTemporary: true };
       }
 
@@ -170,7 +174,7 @@ export class ComparisonEngine {
           })
           .png()
           .toFile(tempReferencePath);
-        
+
         result.reference = { path: tempReferencePath, isTemporary: true };
       }
     }
@@ -180,7 +184,7 @@ export class ComparisonEngine {
 
   private async loadImageAsPng(imagePath: string): Promise<PNG> {
     const buffer = await fs.readFile(imagePath);
-    
+
     // Convert to PNG if not already
     let pngBuffer: Buffer;
     try {
@@ -199,19 +203,23 @@ export class ComparisonEngine {
     await fs.writeFile(outputPath, buffer);
   }
 
-  private applyIgnoreRegions(currentPng: PNG, referencePng: PNG, ignoreRegions: Array<{ x: number, y: number, width: number, height: number }>): void {
+  private applyIgnoreRegions(
+    currentPng: PNG,
+    referencePng: PNG,
+    ignoreRegions: Array<{ x: number; y: number; width: number; height: number }>
+  ): void {
     for (const region of ignoreRegions) {
       for (let y = region.y; y < region.y + region.height && y < currentPng.height; y++) {
         for (let x = region.x; x < region.x + region.width && x < currentPng.width; x++) {
           const idx = (currentPng.width * y + x) << 2;
-          
+
           // Set both images to the same color in ignore regions (gray)
-          currentPng.data[idx] = 128;     // R
+          currentPng.data[idx] = 128; // R
           currentPng.data[idx + 1] = 128; // G
           currentPng.data[idx + 2] = 128; // B
           currentPng.data[idx + 3] = 255; // A
-          
-          referencePng.data[idx] = 128;     // R
+
+          referencePng.data[idx] = 128; // R
           referencePng.data[idx + 1] = 128; // G
           referencePng.data[idx + 2] = 128; // B
           referencePng.data[idx + 3] = 255; // A
@@ -220,35 +228,40 @@ export class ComparisonEngine {
     }
   }
 
-  private async findDifferenceRegions(diffPng: PNG, _options: ComparisonOptions): Promise<DifferenceRegion[]> {
+  private async findDifferenceRegions(
+    diffPng: PNG,
+    _options: ComparisonOptions
+  ): Promise<DifferenceRegion[]> {
     const regions: DifferenceRegion[] = [];
     const visited = new Set<string>();
     const minRegionSize = 10; // Minimum region size to consider
-    
+
     for (let y = 0; y < diffPng.height; y++) {
       for (let x = 0; x < diffPng.width; x++) {
         const key = `${x},${y}`;
         if (visited.has(key)) continue;
-        
+
         const idx = (diffPng.width * y + x) << 2;
         const r = diffPng.data[idx] || 0;
         const g = diffPng.data[idx + 1] || 0;
         const b = diffPng.data[idx + 2] || 0;
-        
+
         // Check if this pixel indicates a difference (red or yellow)
-        if ((r > 200 && g < 100 && b < 100) || // Red - difference
-            (r > 200 && g > 200 && b < 100)) { // Yellow - AA difference
-          
+        if (
+          (r > 200 && g < 100 && b < 100) || // Red - difference
+          (r > 200 && g > 200 && b < 100)
+        ) {
+          // Yellow - AA difference
+
           // Find the bounding box of connected different pixels
           const region = this.floodFill(diffPng, x, y, visited);
-          
+
           if (region.width >= minRegionSize || region.height >= minRegionSize) {
             // Determine severity based on size and color intensity
             const area = region.width * region.height;
-            const severity: 'low' | 'medium' | 'high' = 
-              area > 1000 ? 'high' :
-              area > 100 ? 'medium' : 'low';
-            
+            const severity: 'low' | 'medium' | 'high' =
+              area > 1000 ? 'high' : area > 100 ? 'medium' : 'low';
+
             regions.push({
               ...region,
               severity
@@ -257,48 +270,55 @@ export class ComparisonEngine {
         }
       }
     }
-    
+
     return regions;
   }
 
-  private floodFill(png: PNG, startX: number, startY: number, visited: Set<string>): DifferenceRegion {
+  private floodFill(
+    png: PNG,
+    startX: number,
+    startY: number,
+    visited: Set<string>
+  ): DifferenceRegion {
     const stack = [{ x: startX, y: startY }];
-    let minX = startX, maxX = startX;
-    let minY = startY, maxY = startY;
-    
+    let minX = startX,
+      maxX = startX;
+    let minY = startY,
+      maxY = startY;
+
     while (stack.length > 0) {
       const { x, y } = stack.pop()!;
       const key = `${x},${y}`;
-      
+
       if (visited.has(key) || x < 0 || x >= png.width || y < 0 || y >= png.height) {
         continue;
       }
-      
+
       const idx = (png.width * y + x) << 2;
       const r = png.data[idx] || 0;
       const g = png.data[idx + 1] || 0;
       const b = png.data[idx + 2] || 0;
-      
+
       // Check if this pixel indicates a difference
       if (!((r > 200 && g < 100 && b < 100) || (r > 200 && g > 200 && b < 100))) {
         continue;
       }
-      
+
       visited.add(key);
-      
+
       // Update bounds
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
-      
+
       // Add adjacent pixels
       stack.push({ x: x + 1, y });
       stack.push({ x: x - 1, y });
       stack.push({ x, y: y + 1 });
       stack.push({ x, y: y - 1 });
     }
-    
+
     return {
       x: minX,
       y: minY,

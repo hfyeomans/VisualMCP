@@ -15,27 +15,24 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
   private colorAnalyzer: ColorAnalyzer;
   private layoutAnalyzer: LayoutAnalyzer;
 
-  constructor(
-    colorAnalyzer?: ColorAnalyzer,
-    layoutAnalyzer?: LayoutAnalyzer
-  ) {
+  constructor(colorAnalyzer?: ColorAnalyzer, layoutAnalyzer?: LayoutAnalyzer) {
     this.colorAnalyzer = colorAnalyzer || new ColorAnalyzer();
     this.layoutAnalyzer = layoutAnalyzer || new LayoutAnalyzer();
   }
 
   async analyzeDifferences(
-    diffImagePath: string, 
+    diffImagePath: string,
     options: FeedbackOptions = {}
   ): Promise<FeedbackResult> {
     try {
-      logger.info('Starting feedback analysis', { 
-        diffImagePath, 
+      logger.info('Starting feedback analysis', {
+        diffImagePath,
         priorities: options.priority,
         suggestionsType: options.suggestionsType
       });
 
       // Validate input
-      if (!await fileManager.exists(diffImagePath)) {
+      if (!(await fileManager.exists(diffImagePath))) {
         throw new DiffImageNotFoundError(diffImagePath);
       }
 
@@ -45,14 +42,14 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
 
       // Perform analysis based on priorities
       const analyses = await this.performAnalyses(diffImagePath, priorities);
-      
+
       // Generate issues and suggestions
       const issues = await this.generateIssues(analyses, priorities);
       const suggestions = await this.generateSuggestions(issues, analyses, suggestionsType);
-      
+
       // Calculate confidence based on analysis quality
       const confidence = this.calculateConfidence(issues, analyses);
-      
+
       // Generate summary
       const summary = this.generateSummary(issues, suggestions, context);
 
@@ -76,7 +73,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       if (error instanceof DiffImageNotFoundError) {
         throw error;
       }
-      
+
       logger.error('Feedback analysis failed', error as Error, { diffImagePath });
       throw new AnalysisError(
         `Failed to analyze differences: ${(error as Error).message}`,
@@ -87,7 +84,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
   }
 
   private async performAnalyses(
-    diffImagePath: string, 
+    diffImagePath: string,
     priorities: string[]
   ): Promise<{
     color?: ColorAnalysis;
@@ -101,17 +98,29 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
         logger.debug('Performing color analysis');
         analyses.color = await this.colorAnalyzer.analyzeColors(diffImagePath);
       } catch (error) {
-        logger.warn('Color analysis failed, continuing without it', { diffImagePath }, error as Error);
+        logger.warn(
+          'Color analysis failed, continuing without it',
+          { diffImagePath },
+          error as Error
+        );
       }
     }
 
-    // Perform layout analysis if requested  
-    if (priorities.includes('layout') || priorities.includes('spacing') || priorities.includes('typography')) {
+    // Perform layout analysis if requested
+    if (
+      priorities.includes('layout') ||
+      priorities.includes('spacing') ||
+      priorities.includes('typography')
+    ) {
       try {
         logger.debug('Performing layout analysis');
         analyses.layout = await this.layoutAnalyzer.analyzeLayout(diffImagePath);
       } catch (error) {
-        logger.warn('Layout analysis failed, continuing without it', { diffImagePath }, error as Error);
+        logger.warn(
+          'Layout analysis failed, continuing without it',
+          { diffImagePath },
+          error as Error
+        );
       }
     }
 
@@ -127,11 +136,13 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     // Generate color issues
     if (analyses.color && priorities.includes('colors')) {
       const colorIssues = this.colorAnalyzer.detectColorIssues(analyses.color);
-      issues.push(...colorIssues.map(issue => ({
-        type: issue.type,
-        severity: issue.severity,
-        description: issue.description
-      })));
+      issues.push(
+        ...colorIssues.map(issue => ({
+          type: issue.type,
+          severity: issue.severity,
+          description: issue.description
+        }))
+      );
     }
 
     // Generate layout issues
@@ -139,22 +150,26 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       if (priorities.includes('layout')) {
         // Add layout shift issues
         for (const shift of analyses.layout.layoutShifts) {
-          issues.push({
-            type: 'layout',
-            severity: shift.severity,
-            description: shift.description,
-            location: shift.region
-          });
+          if (shift.region) {
+            issues.push({
+              type: 'layout',
+              severity: shift.severity,
+              description: shift.description,
+              location: shift.region
+            });
+          }
         }
 
         // Add alignment issues
         for (const alignment of analyses.layout.alignmentIssues) {
-          issues.push({
-            type: 'layout',
-            severity: 'medium',
-            description: alignment.description,
-            location: alignment.region
-          });
+          if (alignment.region) {
+            issues.push({
+              type: 'layout',
+              severity: 'medium',
+              description: alignment.description,
+              location: alignment.region
+            });
+          }
         }
       }
 
@@ -185,7 +200,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       }
     }
 
-    logger.debug('Issues generated', { 
+    logger.debug('Issues generated', {
       totalCount: issues.length,
       byType: this.groupIssuesByType(issues)
     });
@@ -203,20 +218,19 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     // Generate color-based suggestions
     if (analyses.color) {
       const colorSuggestions = this.colorAnalyzer.generateColorSuggestions(
-        analyses.color,
         issues.filter(issue => issue.type === 'colors')
       );
-      suggestions.push(...colorSuggestions.filter(s => 
-        suggestionsType === 'both' || s.type === suggestionsType
-      ));
+      suggestions.push(
+        ...colorSuggestions.filter(s => suggestionsType === 'both' || s.type === suggestionsType)
+      );
     }
 
     // Generate layout-based suggestions
     if (analyses.layout) {
       const layoutSuggestions = this.layoutAnalyzer.generateLayoutSuggestions(analyses.layout);
-      suggestions.push(...layoutSuggestions.filter(s => 
-        suggestionsType === 'both' || s.type === suggestionsType
-      ));
+      suggestions.push(
+        ...layoutSuggestions.filter(s => suggestionsType === 'both' || s.type === suggestionsType)
+      );
     }
 
     // Generate generic suggestions based on issue types
@@ -227,12 +241,15 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     suggestions = this.deduplicateSuggestions(suggestions);
     suggestions.sort((a, b) => a.priority - b.priority);
 
-    logger.debug('Suggestions generated', { 
+    logger.debug('Suggestions generated', {
       totalCount: suggestions.length,
-      byType: suggestions.reduce((acc, s) => {
-        acc[s.type] = (acc[s.type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
+      byType: suggestions.reduce(
+        (acc, s) => {
+          acc[s.type] = (acc[s.type] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      )
     });
 
     return suggestions;
@@ -246,7 +263,10 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     const issueTypes = new Set(issues.map(i => i.type));
 
     // Generic typography suggestions
-    if (issueTypes.has('typography') && (suggestionsType === 'general' || suggestionsType === 'both')) {
+    if (
+      issueTypes.has('typography') &&
+      (suggestionsType === 'general' || suggestionsType === 'both')
+    ) {
       suggestions.push({
         type: 'general',
         title: 'Typography Review',
@@ -256,8 +276,10 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     }
 
     // Generic content suggestions
-    if (issues.some(i => i.description.includes('content')) && 
-        (suggestionsType === 'general' || suggestionsType === 'both')) {
+    if (
+      issues.some(i => i.description.includes('content')) &&
+      (suggestionsType === 'general' || suggestionsType === 'both')
+    ) {
       suggestions.push({
         type: 'general',
         title: 'Content Review',
@@ -293,11 +315,16 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     // Reduce confidence more for high severity issues
     const severityPenalty = issues.reduce((penalty, issue) => {
       switch (issue.severity) {
-        case 'critical': return penalty + 15;
-        case 'high': return penalty + 10;
-        case 'medium': return penalty + 5;
-        case 'low': return penalty + 2;
-        default: return penalty;
+        case 'critical':
+          return penalty + 15;
+        case 'high':
+          return penalty + 10;
+        case 'medium':
+          return penalty + 5;
+        case 'low':
+          return penalty + 2;
+        default:
+          return penalty;
       }
     }, 0);
 
@@ -351,9 +378,12 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
   }
 
   private groupIssuesByType(issues: Issue[]): Record<string, number> {
-    return issues.reduce((acc, issue) => {
-      acc[issue.type] = (acc[issue.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    return issues.reduce(
+      (acc, issue) => {
+        acc[issue.type] = (acc[issue.type] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
   }
 }

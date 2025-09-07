@@ -37,9 +37,9 @@ export class Container implements IDependencyContainer {
     if (this.singletonFactories.has(key)) {
       logger.debug('Creating singleton', { key: key.toString() });
       const factory = this.singletonFactories.get(key)!;
-      const instance = factory();
+      const instance = factory() as T;
       this.singletons.set(key, instance);
-      return instance as T;
+      return instance;
     }
 
     // Create transient instance
@@ -53,9 +53,7 @@ export class Container implements IDependencyContainer {
   }
 
   isRegistered(key: string | symbol): boolean {
-    return this.factories.has(key) || 
-           this.singletonFactories.has(key) || 
-           this.singletons.has(key);
+    return this.factories.has(key) || this.singletonFactories.has(key) || this.singletons.has(key);
   }
 
   clear(): void {

@@ -33,14 +33,12 @@ export class LayoutAnalyzer {
     try {
       logger.debug('Starting layout analysis', { diffImagePath });
 
-      const { data, info } = await sharp(diffImagePath)
-        .raw()
-        .toBuffer({ resolveWithObject: true });
+      const { data, info } = await sharp(diffImagePath).raw().toBuffer({ resolveWithObject: true });
 
       const analysis = this.performLayoutAnalysis(data, info);
-      
-      logger.debug('Layout analysis completed', { 
-        diffImagePath, 
+
+      logger.debug('Layout analysis completed', {
+        diffImagePath,
         regionsCount: analysis.regions.length,
         layoutShiftsCount: analysis.layoutShifts.length,
         alignmentIssuesCount: analysis.alignmentIssues.length
@@ -57,10 +55,13 @@ export class LayoutAnalyzer {
     }
   }
 
-  private performLayoutAnalysis(data: Buffer, info: { width: number; height: number; channels: number }): LayoutAnalysis {
+  private performLayoutAnalysis(
+    data: Buffer,
+    info: { width: number; height: number; channels: number }
+  ): LayoutAnalysis {
     // Detect significant difference regions
     const regions = this.detectSignificantRegions(data, info);
-    
+
     // Analyze for different types of layout issues
     const layoutShifts = this.detectLayoutShifts(regions, info);
     const alignmentIssues = this.detectAlignmentIssues(regions, info);
@@ -75,40 +76,39 @@ export class LayoutAnalyzer {
   }
 
   private detectSignificantRegions(
-    data: Buffer, 
+    data: Buffer,
     info: { width: number; height: number; channels: number }
   ): DifferenceRegion[] {
     const regions: DifferenceRegion[] = [];
     const visited = new Set<string>();
     const minRegionSize = 5; // Minimum size to consider significant
-    
+
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < info.width; x++) {
         const key = `${x},${y}`;
         if (visited.has(key)) continue;
-        
+
         const idx = (info.width * y + x) * info.channels;
         const r = data[idx] || 0;
         const g = data[idx + 1] || 0;
         const b = data[idx + 2] || 0;
-        
+
         // Check if this pixel indicates a difference (red or yellow from diff image)
         if (this.isDifferencePixel(r, g, b)) {
           const region = this.floodFillRegion(data, info, x, y, visited);
-          
+
           if (region.width >= minRegionSize && region.height >= minRegionSize) {
             // Determine severity based on size
             const area = region.width * region.height;
-            const severity: 'low' | 'medium' | 'high' = 
-              area > 5000 ? 'high' :
-              area > 1000 ? 'medium' : 'low';
-            
+            const severity: 'low' | 'medium' | 'high' =
+              area > 5000 ? 'high' : area > 1000 ? 'medium' : 'low';
+
             regions.push({ ...region, severity });
           }
         }
       }
     }
-    
+
     logger.debug('Significant regions detected', { count: regions.length });
     return regions;
   }
@@ -119,48 +119,50 @@ export class LayoutAnalyzer {
   }
 
   private floodFillRegion(
-    data: Buffer, 
-    info: { width: number; height: number; channels: number }, 
-    startX: number, 
-    startY: number, 
+    data: Buffer,
+    info: { width: number; height: number; channels: number },
+    startX: number,
+    startY: number,
     visited: Set<string>
   ): DifferenceRegion {
     const stack = [{ x: startX, y: startY }];
-    let minX = startX, maxX = startX;
-    let minY = startY, maxY = startY;
-    
+    let minX = startX,
+      maxX = startX;
+    let minY = startY,
+      maxY = startY;
+
     while (stack.length > 0) {
       const { x, y } = stack.pop()!;
       const key = `${x},${y}`;
-      
+
       if (visited.has(key) || x < 0 || x >= info.width || y < 0 || y >= info.height) {
         continue;
       }
-      
+
       const idx = (info.width * y + x) * info.channels;
       const r = data[idx] || 0;
       const g = data[idx + 1] || 0;
       const b = data[idx + 2] || 0;
-      
+
       if (!this.isDifferencePixel(r, g, b)) {
         continue;
       }
-      
+
       visited.add(key);
-      
+
       // Update bounds
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
-      
+
       // Add adjacent pixels to stack
       stack.push({ x: x + 1, y });
       stack.push({ x: x - 1, y });
       stack.push({ x, y: y + 1 });
       stack.push({ x, y: y - 1 });
     }
-    
+
     return {
       x: minX,
       y: minY,
@@ -171,7 +173,7 @@ export class LayoutAnalyzer {
   }
 
   private detectLayoutShifts(
-    regions: DifferenceRegion[], 
+    regions: DifferenceRegion[],
     imageInfo: { width: number; height: number }
   ): Array<{
     type: string;
@@ -186,14 +188,16 @@ export class LayoutAnalyzer {
       const imageArea = imageInfo.width * imageInfo.height;
       const areaPercentage = (area / imageArea) * 100;
 
-      if (areaPercentage > 10) { // Large layout change
+      if (areaPercentage > 10) {
+        // Large layout change
         layoutShifts.push({
           type: 'major_layout_shift',
           severity: 'high' as const,
           description: `Major layout shift detected (${Math.round(areaPercentage)}% of screen, ${region.width}x${region.height} pixels)`,
           region
         });
-      } else if (areaPercentage > 2) { // Medium layout change
+      } else if (areaPercentage > 2) {
+        // Medium layout change
         layoutShifts.push({
           type: 'minor_layout_shift',
           severity: 'medium' as const,
@@ -219,7 +223,7 @@ export class LayoutAnalyzer {
   }
 
   private detectAlignmentIssues(
-    regions: DifferenceRegion[], 
+    regions: DifferenceRegion[],
     imageInfo: { width: number; height: number }
   ): Array<{
     type: string;
@@ -239,8 +243,10 @@ export class LayoutAnalyzer {
         });
       }
 
-      if (region.x + region.width > imageInfo.width - edgeThreshold || 
-          region.y + region.height > imageInfo.height - edgeThreshold) {
+      if (
+        region.x + region.width > imageInfo.width - edgeThreshold ||
+        region.y + region.height > imageInfo.height - edgeThreshold
+      ) {
         alignmentIssues.push({
           type: 'edge_alignment',
           description: 'Element positioning change detected near screen edge',
@@ -251,7 +257,7 @@ export class LayoutAnalyzer {
       // Check for center alignment issues
       const centerX = imageInfo.width / 2;
       const regionCenterX = region.x + region.width / 2;
-      
+
       if (Math.abs(regionCenterX - centerX) < 50 && region.width > 100) {
         alignmentIssues.push({
           type: 'center_alignment',
@@ -261,10 +267,10 @@ export class LayoutAnalyzer {
       }
 
       // Check for grid/column alignment (regions with similar x-coordinates)
-      const commonXPositions = regions
-        .filter(r => r !== region && Math.abs(r.x - region.x) < 10)
-        .length;
-      
+      const commonXPositions = regions.filter(
+        r => r !== region && Math.abs(r.x - region.x) < 10
+      ).length;
+
       if (commonXPositions > 0) {
         alignmentIssues.push({
           type: 'column_alignment',
@@ -287,8 +293,7 @@ export class LayoutAnalyzer {
 
     for (const region of regions) {
       // Small, thin regions might indicate spacing changes
-      if ((region.width < 20 && region.height > 50) || 
-          (region.height < 20 && region.width > 50)) {
+      if ((region.width < 20 && region.height > 50) || (region.height < 20 && region.width > 50)) {
         spacingIssues.push({
           type: 'spacing_adjustment',
           description: `Spacing change detected (${region.width}x${region.height})`,

@@ -5,10 +5,12 @@ export const ScreenshotTargetSchema = z.union([
   z.object({
     type: z.literal('url'),
     url: z.string().url(),
-    viewport: z.object({
-      width: z.number().int().positive(),
-      height: z.number().int().positive()
-    }).optional()
+    viewport: z
+      .object({
+        width: z.number().int().positive(),
+        height: z.number().int().positive()
+      })
+      .optional()
   }),
   z.object({
     type: z.literal('window'),
@@ -18,7 +20,7 @@ export const ScreenshotTargetSchema = z.union([
   z.object({
     type: z.literal('region'),
     x: z.number().int().nonnegative(),
-    y: z.number().int().nonnegative(), 
+    y: z.number().int().nonnegative(),
     width: z.number().int().positive(),
     height: z.number().int().positive()
   })
@@ -32,12 +34,14 @@ export const ScreenshotOptionsSchema = z.object({
   quality: z.number().int().min(1).max(100).optional(),
   filename: z.string().optional(),
   fullPage: z.boolean().default(false),
-  clip: z.object({
-    x: z.number(),
-    y: z.number(),
-    width: z.number(),
-    height: z.number()
-  }).optional()
+  clip: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number()
+    })
+    .optional()
 });
 
 export type ScreenshotOptions = Partial<z.infer<typeof ScreenshotOptionsSchema>>;
@@ -56,12 +60,16 @@ export interface ScreenshotResult {
 // Comparison options
 export const ComparisonOptionsSchema = z.object({
   tolerance: z.number().min(0).max(100).default(5),
-  ignoreRegions: z.array(z.object({
-    x: z.number(),
-    y: z.number(),
-    width: z.number(),
-    height: z.number()
-  })).default([]),
+  ignoreRegions: z
+    .array(
+      z.object({
+        x: z.number(),
+        y: z.number(),
+        width: z.number(),
+        height: z.number()
+      })
+    )
+    .default([]),
   includeAA: z.boolean().default(true),
   threshold: z.number().min(0).max(1).default(0.1)
 });
@@ -102,7 +110,9 @@ export interface ImageMetadata {
 
 // Feedback analysis
 export const FeedbackOptionsSchema = z.object({
-  priority: z.array(z.enum(['layout', 'colors', 'typography', 'spacing', 'content'])).default(['layout']),
+  priority: z
+    .array(z.enum(['layout', 'colors', 'typography', 'spacing', 'content']))
+    .default(['layout']),
   context: z.string().optional(),
   suggestionsType: z.enum(['css', 'general', 'both']).default('both')
 });

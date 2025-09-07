@@ -3,11 +3,11 @@ import { Page } from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
 import { IScreenshotEngine, IBrowserManager } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
-import { 
-  ScreenshotError, 
-  ScreenshotTimeoutError, 
-  ScreenshotNavigationError, 
-  ScreenshotCaptureError 
+import {
+  ScreenshotError,
+  ScreenshotTimeoutError,
+  ScreenshotNavigationError,
+  ScreenshotCaptureError
 } from '../core/errors.js';
 import { config } from '../core/config.js';
 import { createLogger } from '../core/logger.js';
@@ -22,7 +22,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
   constructor(private browserManager: IBrowserManager) {
     this.outputDir = config.outputDir;
     this.ensureOutputDirectory();
-    
+
     logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
   }
 
@@ -36,21 +36,17 @@ export class ScreenshotEngine implements IScreenshotEngine {
   ): Promise<ScreenshotResult> {
     const startTime = Date.now();
     const timestamp = new Date().toISOString();
-    
+
     // Apply defaults from config
     const mergedOptions = {
-      format: options.format || config.screenshotDefaults.defaultFormat,
-      quality: options.quality || config.screenshotDefaults.defaultQuality,
-      fullPage: options.fullPage || false,
-      filename: options.filename,
-      clip: options.clip
-    } as const;
+      ...config.screenshotDefaults,
+      ...options
+    };
 
-    const filename = mergedOptions.filename || 
-      `screenshot_${uuidv4()}.${mergedOptions.format}`;
+    const filename = mergedOptions.filename || `screenshot_${uuidv4()}.${mergedOptions.format}`;
     const filepath = path.join(this.outputDir, filename);
 
-    logger.info('Taking screenshot', { 
+    logger.info('Taking screenshot', {
       targetType: target.type,
       format: mergedOptions.format,
       filename
@@ -60,10 +56,10 @@ export class ScreenshotEngine implements IScreenshotEngine {
       switch (target.type) {
         case 'url':
           return await this.takeWebScreenshot(target, mergedOptions, filepath, timestamp);
-        
+
         case 'region':
           return await this.takeRegionScreenshot(target, mergedOptions, filepath, timestamp);
-        
+
         default:
           throw new ScreenshotError(
             `Unsupported target type: ${(target as any).type}`,
@@ -72,60 +68,68 @@ export class ScreenshotEngine implements IScreenshotEngine {
       }
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error('Screenshot failed', error as Error, { 
+      logger.error('Screenshot failed', error as Error, {
         targetType: target.type,
         duration,
         filename
       });
-      
+
       if (error instanceof ScreenshotError) {
         throw error;
       }
-      
-      throw new ScreenshotCaptureError(
-        (error as Error).message,
-        error as Error
-      );
+
+      throw new ScreenshotCaptureError((error as Error).message, error as Error);
     }
   }
 
   private async takeWebScreenshot(
     target: ScreenshotTarget & { type: 'url' },
-    options: typeof config.screenshotDefaults & { filename?: string; clip?: any },
+    options: {
+      defaultFormat: 'png' | 'jpeg';
+      defaultQuality: number;
+      defaultViewport: { width: number; height: number };
+      timeout: number;
+      waitForNetworkIdle: boolean;
+      format?: 'png' | 'jpeg';
+      quality?: number;
+      fullPage?: boolean;
+      filename?: string;
+      clip?: any;
+    },
     filepath: string,
     timestamp: string
   ): Promise<ScreenshotResult> {
     let page: Page | null = null;
-    
+
     try {
       page = await this.browserManager.createPage();
-      
+
       logger.debug('Navigating to URL', { url: target.url });
 
       // Set viewport if specified
       if (target.viewport) {
-        await page.setViewport({
-          width: target.viewport.width,
-          height: target.viewport.height,
-          deviceScaleFactor: 1
-        });
-        
+        if (page) {
+          await page.setViewport({
+            width: target.viewport.width,
+            height: target.viewport.height,
+            deviceScaleFactor: 1
+          });
+        }
+
         logger.debug('Viewport set', target.viewport);
       }
 
       // Navigate to URL with timeout handling
       try {
-        await page.goto(target.url, {
-          waitUntil: config.screenshotDefaults.waitForNetworkIdle ? 'networkidle0' : 'load',
-          timeout: config.screenshotDefaults.timeout
-        });
+        if (page) {
+          await page.goto(target.url, {
+            waitUntil: options.waitForNetworkIdle ? 'networkidle0' : 'load',
+            timeout: options.timeout
+          });
+        }
       } catch (error) {
         if ((error as Error).message.includes('timeout')) {
-          throw new ScreenshotTimeoutError(
-            target.url, 
-            config.screenshotDefaults.timeout,
-            error as Error
-          );
+          throw new ScreenshotTimeoutError(target.url, options.timeout, error as Error);
         }
         throw new ScreenshotNavigationError(target.url, error as Error);
       }
@@ -133,42 +137,46 @@ export class ScreenshotEngine implements IScreenshotEngine {
       logger.debug('Page loaded, waiting for stability');
 
       // Wait for any animations or dynamic content to complete
-      await page.evaluate(() => {
-        return new Promise<void>((resolve) => {
-          if (document.readyState === 'complete') {
-            setTimeout(resolve, 500);
-          } else {
-            window.addEventListener('load', () => setTimeout(resolve, 500));
-          }
+      if (page) {
+        await page.evaluate(() => {
+          return new Promise<void>(resolve => {
+            if (document.readyState === 'complete') {
+              setTimeout(resolve, 500);
+            } else {
+              window.addEventListener('load', () => setTimeout(resolve, 500));
+            }
+          });
         });
-      });
+      }
 
       // Take screenshot
       const screenshotOptions: any = {
         path: filepath,
-        type: options.format,
+        type: options.format || options.defaultFormat,
         fullPage: options.fullPage
       };
 
-      if (options.format === 'jpeg' && options.quality) {
-        screenshotOptions.quality = options.quality;
+      if ((options.format || options.defaultFormat) === 'jpeg') {
+        screenshotOptions.quality = options.quality || options.defaultQuality;
       }
 
       if (options.clip) {
         screenshotOptions.clip = options.clip;
       }
 
-      logger.debug('Capturing screenshot', { 
+      logger.debug('Capturing screenshot', {
         fullPage: options.fullPage,
         hasClip: !!options.clip
       });
 
-      await page.screenshot(screenshotOptions);
+      if (page) {
+        await page.screenshot(screenshotOptions);
+      }
 
       // Get image metadata
       const metadata = await imageProcessor.getImageMetadata(filepath);
-      
-      logger.info('Web screenshot completed successfully', { 
+
+      logger.info('Web screenshot completed successfully', {
         filepath,
         size: metadata.size,
         dimensions: `${metadata.width}x${metadata.height}`,
@@ -179,12 +187,11 @@ export class ScreenshotEngine implements IScreenshotEngine {
         filepath,
         width: metadata.width,
         height: metadata.height,
-        format: options.format,
+        format: options.format || 'png',
         size: metadata.size,
         timestamp,
         target
       };
-
     } finally {
       if (page) {
         await this.browserManager.closePage(page);
@@ -194,12 +201,23 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
   private async takeRegionScreenshot(
     target: ScreenshotTarget & { type: 'region' },
-    options: typeof config.screenshotDefaults & { filename?: string; clip?: any },
+    options: {
+      defaultFormat: 'png' | 'jpeg';
+      defaultQuality: number;
+      defaultViewport: { width: number; height: number };
+      timeout: number;
+      waitForNetworkIdle: boolean;
+      format?: 'png' | 'jpeg';
+      quality?: number;
+      fullPage?: boolean;
+      filename?: string;
+      clip?: any;
+    },
     filepath: string,
     timestamp: string
   ): Promise<ScreenshotResult> {
     logger.warn('Desktop region capture not fully implemented, creating placeholder');
-    
+
     // This is a placeholder implementation - in production, you'd use platform-specific
     // screen capture APIs or tools like screenshot-desktop
     const placeholderHtml = `
@@ -221,19 +239,21 @@ export class ScreenshotEngine implements IScreenshotEngine {
     `;
 
     let page: Page | null = null;
-    
+
     try {
       page = await this.browserManager.createPage();
-      
-      await page.setContent(placeholderHtml);
-      await page.setViewport({
-        width: Math.max(target.width, 400),
-        height: Math.max(target.height, 300)
-      });
+
+      if (page) {
+        await page.setContent(placeholderHtml);
+        await page.setViewport({
+          width: Math.max(target.width, 400),
+          height: Math.max(target.height, 300)
+        });
+      }
 
       const screenshotOptions: any = {
         path: filepath,
-        type: options.format,
+        type: options.format || options.defaultFormat,
         clip: {
           x: 0,
           y: 0,
@@ -242,15 +262,17 @@ export class ScreenshotEngine implements IScreenshotEngine {
         }
       };
 
-      if (options.format === 'jpeg' && options.quality) {
-        screenshotOptions.quality = options.quality;
+      if ((options.format || options.defaultFormat) === 'jpeg') {
+        screenshotOptions.quality = options.quality || options.defaultQuality;
       }
 
-      await page.screenshot(screenshotOptions);
+      if (page) {
+        await page.screenshot(screenshotOptions);
+      }
 
       const metadata = await imageProcessor.getImageMetadata(filepath);
-      
-      logger.info('Region screenshot placeholder created', { 
+
+      logger.info('Region screenshot placeholder created', {
         filepath,
         region: `${target.x},${target.y} ${target.width}×${target.height}`,
         size: metadata.size
@@ -260,12 +282,11 @@ export class ScreenshotEngine implements IScreenshotEngine {
         filepath,
         width: metadata.width,
         height: metadata.height,
-        format: options.format,
+        format: options.format || 'png',
         size: metadata.size,
         timestamp,
         target
       };
-
     } finally {
       if (page) {
         await this.browserManager.closePage(page);
@@ -276,17 +297,15 @@ export class ScreenshotEngine implements IScreenshotEngine {
   async listScreenshots(): Promise<string[]> {
     try {
       logger.debug('Listing screenshots', { directory: this.outputDir });
-      
+
       const screenshots = await fileManager.listFiles(this.outputDir);
-      const imageFiles = screenshots.filter(file => 
-        file.match(/\.(png|jpeg|jpg)$/i)
-      );
-      
+      const imageFiles = screenshots.filter(file => file.match(/\.(png|jpeg|jpg)$/i));
+
       logger.debug('Screenshots listed', { count: imageFiles.length });
       return imageFiles;
     } catch (error) {
-      logger.error('Error listing screenshots', error as Error, { 
-        directory: this.outputDir 
+      logger.error('Error listing screenshots', error as Error, {
+        directory: this.outputDir
       });
       return [];
     }
@@ -309,11 +328,11 @@ export class ScreenshotEngine implements IScreenshotEngine {
   }
 
   setOutputDirectory(dir: string): void {
-    logger.info('Changing output directory', { 
+    logger.info('Changing output directory', {
       from: this.outputDir,
       to: dir
     });
-    
+
     this.outputDir = dir;
     this.ensureOutputDirectory();
   }

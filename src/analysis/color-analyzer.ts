@@ -22,14 +22,12 @@ export class ColorAnalyzer {
     try {
       logger.debug('Starting color analysis', { imagePath });
 
-      const { data, info } = await sharp(imagePath)
-        .raw()
-        .toBuffer({ resolveWithObject: true });
+      const { data, info } = await sharp(imagePath).raw().toBuffer({ resolveWithObject: true });
 
       const analysis = this.performColorAnalysis(data, info.channels);
-      
-      logger.debug('Color analysis completed', { 
-        imagePath, 
+
+      logger.debug('Color analysis completed', {
+        imagePath,
         dominantColorsCount: analysis.dominantColors.length,
         contrast: analysis.contrast,
         brightness: Math.round(analysis.brightness)
@@ -51,7 +49,7 @@ export class ColorAnalyzer {
     let totalPixels = 0;
     let redPixels = 0;
     let yellowPixels = 0;
-    
+
     const colorCounts = new Map<string, number>();
     const uniqueColors = new Set<string>();
 
@@ -68,7 +66,7 @@ export class ColorAnalyzer {
       if (r > 200 && g < 100 && b < 100) {
         redPixels++;
       }
-      
+
       // Track yellow pixels (AA differences in visual comparisons)
       if (r > 200 && g > 200 && b < 100) {
         yellowPixels++;
@@ -122,7 +120,8 @@ export class ColorAnalyzer {
     }
 
     // Significant red differences (likely visual changes)
-    const redPercentage = (analysis.redPixels / (analysis.redPixels + analysis.yellowPixels + 1000)) * 100;
+    const redPercentage =
+      (analysis.redPixels / (analysis.redPixels + analysis.yellowPixels + 1000)) * 100;
     if (redPercentage > 10) {
       issues.push({
         type: 'colors',
@@ -155,7 +154,7 @@ export class ColorAnalyzer {
       });
     }
 
-    logger.debug('Color issues detected', { 
+    logger.debug('Color issues detected', {
       issuesCount: issues.length,
       redPixels: analysis.redPixels,
       yellowPixels: analysis.yellowPixels,
@@ -170,7 +169,6 @@ export class ColorAnalyzer {
    * Generate color-specific feedback and suggestions
    */
   generateColorSuggestions(
-    analysis: ColorAnalysis,
     issues: Array<{ type: string; severity: string; description: string }>
   ): Array<{
     type: 'css' | 'general';
@@ -195,7 +193,8 @@ export class ColorAnalyzer {
         suggestions.push({
           type: 'general' as const,
           title: 'Color Contrast Guidelines',
-          description: 'Follow WCAG guidelines for color contrast (4.5:1 for normal text, 3:1 for large text)',
+          description:
+            'Follow WCAG guidelines for color contrast (4.5:1 for normal text, 3:1 for large text)',
           priority: 2
         });
       }
@@ -230,7 +229,7 @@ export class ColorAnalyzer {
       }
     }
 
-    logger.debug('Color suggestions generated', { 
+    logger.debug('Color suggestions generated', {
       suggestionsCount: suggestions.length,
       colorIssuesCount: colorIssues.length
     });

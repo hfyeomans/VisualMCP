@@ -1,21 +1,16 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs-extra';
-import { 
-  MonitoringSession, 
-  MonitoringScreenshot, 
-  StartMonitoringParams
-} from '../types/index.js';
-import { ScreenshotEngine } from './puppeteer.js';
-import { ComparisonEngine } from '../comparison/differ.js';
+import { MonitoringSession, MonitoringScreenshot, StartMonitoringParams } from '../types/index.js';
+import { IScreenshotEngine, IComparisonEngine } from '../interfaces/index.js';
 
 export class MonitoringManager extends EventEmitter {
   private sessions: Map<string, MonitoringSession> = new Map();
   private intervals: Map<string, NodeJS.Timeout> = new Map();
-  private screenshotEngine: ScreenshotEngine;
-  private comparisonEngine: ComparisonEngine;
+  private screenshotEngine: IScreenshotEngine;
+  private comparisonEngine: IComparisonEngine;
 
-  constructor(screenshotEngine: ScreenshotEngine, comparisonEngine: ComparisonEngine) {
+  constructor(screenshotEngine: IScreenshotEngine, comparisonEngine: IComparisonEngine) {
     super();
     this.screenshotEngine = screenshotEngine;
     this.comparisonEngine = comparisonEngine;
@@ -35,7 +30,7 @@ export class MonitoringManager extends EventEmitter {
     };
 
     // Validate reference image exists
-    if (!await fs.pathExists(params.referenceImage)) {
+    if (!(await fs.pathExists(params.referenceImage))) {
       throw new Error(`Reference image not found: ${params.referenceImage}`);
     }
 
@@ -57,7 +52,7 @@ export class MonitoringManager extends EventEmitter {
     await this.captureMonitoringScreenshot(sessionId);
 
     this.emit('monitoring_started', { sessionId, session });
-    
+
     return sessionId;
   }
 
@@ -141,7 +136,9 @@ export class MonitoringManager extends EventEmitter {
         if (session.autoFeedback) {
           // This would integrate with FeedbackAnalyzer
           // For now, just log the change
-          console.log(`Significant change detected in session ${sessionId}: ${comparison.differencePercentage}%`);
+          console.log(
+            `Significant change detected in session ${sessionId}: ${comparison.differencePercentage}%`
+          );
         }
       }
 
@@ -149,7 +146,6 @@ export class MonitoringManager extends EventEmitter {
         sessionId,
         screenshot: monitoringScreenshot
       });
-
     } catch (error) {
       console.error(`Error capturing monitoring screenshot for session ${sessionId}:`, error);
       throw error;
@@ -160,7 +156,7 @@ export class MonitoringManager extends EventEmitter {
     const start = new Date(startTime);
     const end = new Date(endTime);
     const durationMs = end.getTime() - start.getTime();
-    
+
     const hours = Math.floor(durationMs / (1000 * 60 * 60));
     const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
@@ -227,7 +223,7 @@ export class MonitoringManager extends EventEmitter {
 
     this.intervals.set(sessionId, intervalId);
     this.emit('monitoring_resumed', { sessionId });
-    
+
     return true;
   }
 
