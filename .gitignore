@@ -143,6 +143,8 @@ archive/
 !.github/
 !.npmrc
 !.nvmrc
+!.eslintrc*
+!.prettierrc*
 
 # Reference images (these should be committed when ready for production)
 # test-app/reference-designs/*.png
