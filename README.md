@@ -71,6 +71,23 @@ Configure the MCP server connection:
 }
 ```
 
+## ⚙️ Configuration
+
+Visual MCP ships with sensible defaults, but you can override settings via environment variables or a `.env` file. Copy `.env.example` to `.env` and adjust values as needed.
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `VISUAL_MCP_OUTPUT_DIR` | Directory for captured screenshots | `./screenshots` |
+| `VISUAL_MCP_COMPARISONS_DIR` | Directory for diff images | `./comparisons` |
+| `VISUAL_MCP_TEMP_DIR` | Temporary working directory | `./temp` |
+| `VISUAL_MCP_SCREENSHOT_FORMAT` | Screenshot format (`png`/`jpeg`) | `png` |
+| `VISUAL_MCP_SCREENSHOT_TIMEOUT` | Navigation timeout (ms) | `30000` |
+| `VISUAL_MCP_TOLERANCE` | Comparison tolerance percentage | `5` |
+| `VISUAL_MCP_MONITOR_INTERVAL` | Monitoring interval (seconds) | `5` |
+| `VISUAL_MCP_LOG_LEVEL` | Logger level (`debug`/`info`/`warn`/`error`) | `info` |
+
+Any unset values fall back to defaults; overrides are deep-merged so partial updates (e.g., adjusting `VISUAL_MCP_SCREENSHOT_QUALITY`) do not reset other options.
+
 ## 🔧 Available MCP Tools
 
 ### 1. take_screenshot
@@ -183,9 +200,13 @@ Stop a monitoring session and get summary.
 
 ## 🧪 Testing
 
-### Run the Test Suite
+Automated unit/integration suites are being rebuilt as part of the Phase 1 refactor. A ConfigManager unit suite is available (`npm test`) while we restore broader coverage. Use the smoke harnesses below for end-to-end flows.
 
 ```bash
+# Unit tests
+npm test
+
+# CLI smoke harness
 node cli-tools/test-runner.js
 ```
 

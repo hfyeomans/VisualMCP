@@ -1,7 +1,12 @@
 import path from 'path';
 import { Page } from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
-import { IScreenshotEngine, IBrowserManager } from '../interfaces/index.js';
+import {
+  IScreenshotEngine,
+  IBrowserManager,
+  IFileManager,
+  IImageProcessor
+} from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
 import {
   ScreenshotError,
@@ -18,22 +23,43 @@ const logger = createLogger('ScreenshotEngine');
 
 export class ScreenshotEngine implements IScreenshotEngine {
   private outputDir: string;
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
-  constructor(private browserManager: IBrowserManager) {
+  constructor(
+    private browserManager: IBrowserManager,
+    private readonly fileHelper: IFileManager = fileManager,
+    private readonly imageHelper: IImageProcessor = imageProcessor
+  ) {
     this.outputDir = config.outputDir;
-    this.ensureOutputDirectory();
-
     logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
   }
 
-  private async ensureOutputDirectory(): Promise<void> {
-    await fileManager.ensureDirectory(this.outputDir);
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        await this.fileHelper.ensureDirectory(this.outputDir);
+        this.initialized = true;
+      })().finally(() => {
+        this.initPromise = null;
+      });
+    }
+
+    await this.initPromise;
+  }
+
+  async init(): Promise<void> {
+    await this.ensureInitialized();
   }
 
   async takeScreenshot(
     target: ScreenshotTarget,
     options: ScreenshotOptions = {}
   ): Promise<ScreenshotResult> {
+    await this.ensureInitialized();
+
     const startTime = Date.now();
     const timestamp = new Date().toISOString();
 
@@ -94,7 +120,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
       quality?: number;
       fullPage?: boolean;
       filename?: string;
-      clip?: any;
+      clip?: { x: number; y: number; width: number; height: number };
     },
     filepath: string,
     timestamp: string
@@ -102,7 +128,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
     let page: Page | null = null;
 
     try {
-      page = await this.browserManager.createPage();
+      page = (await this.browserManager.createPage()) as Page;
 
       logger.debug('Navigating to URL', { url: target.url });
 
@@ -140,17 +166,25 @@ export class ScreenshotEngine implements IScreenshotEngine {
       if (page) {
         await page.evaluate(() => {
           return new Promise<void>(resolve => {
+            /* eslint-disable no-undef */
             if (document.readyState === 'complete') {
               setTimeout(resolve, 500);
             } else {
               window.addEventListener('load', () => setTimeout(resolve, 500));
             }
+            /* eslint-enable no-undef */
           });
         });
       }
 
       // Take screenshot
-      const screenshotOptions: any = {
+      const screenshotOptions: {
+        path: string;
+        type?: 'png' | 'jpeg';
+        fullPage?: boolean;
+        quality?: number;
+        clip?: { x: number; y: number; width: number; height: number };
+      } = {
         path: filepath,
         type: options.format || options.defaultFormat,
         fullPage: options.fullPage
@@ -174,7 +208,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
       }
 
       // Get image metadata
-      const metadata = await imageProcessor.getImageMetadata(filepath);
+      const metadata = await this.imageHelper.getImageMetadata(filepath);
 
       logger.info('Web screenshot completed successfully', {
         filepath,
@@ -211,7 +245,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
       quality?: number;
       fullPage?: boolean;
       filename?: string;
-      clip?: any;
+      clip?: { x: number; y: number; width: number; height: number };
     },
     filepath: string,
     timestamp: string
@@ -241,7 +275,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
     let page: Page | null = null;
 
     try {
-      page = await this.browserManager.createPage();
+      page = (await this.browserManager.createPage()) as Page;
 
       if (page) {
         await page.setContent(placeholderHtml);
@@ -270,7 +304,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
         await page.screenshot(screenshotOptions);
       }
 
-      const metadata = await imageProcessor.getImageMetadata(filepath);
+      const metadata = await this.imageHelper.getImageMetadata(filepath);
 
       logger.info('Region screenshot placeholder created', {
         filepath,
@@ -295,10 +329,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
   }
 
   async listScreenshots(): Promise<string[]> {
+    await this.ensureInitialized();
+
     try {
       logger.debug('Listing screenshots', { directory: this.outputDir });
 
-      const screenshots = await fileManager.listFiles(this.outputDir);
+      const screenshots = await this.fileHelper.listFiles(this.outputDir);
       const imageFiles = screenshots.filter(file => file.match(/\.(png|jpeg|jpg)$/i));
 
       logger.debug('Screenshots listed', { count: imageFiles.length });
@@ -312,9 +348,11 @@ export class ScreenshotEngine implements IScreenshotEngine {
   }
 
   async deleteScreenshot(filepath: string): Promise<boolean> {
+    await this.ensureInitialized();
+
     try {
       logger.debug('Deleting screenshot', { filepath });
-      await fileManager.deleteFile(filepath);
+      await this.fileHelper.deleteFile(filepath);
       logger.info('Screenshot deleted', { filepath });
       return true;
     } catch (error) {
@@ -334,7 +372,9 @@ export class ScreenshotEngine implements IScreenshotEngine {
     });
 
     this.outputDir = dir;
-    this.ensureOutputDirectory();
+    this.initialized = false;
+    this.initPromise = null;
+    void this.ensureInitialized();
   }
 
   async cleanup(): Promise<void> {

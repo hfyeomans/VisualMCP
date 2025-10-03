@@ -8,14 +8,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { config } from './core/config.js';
 import { createLogger } from './core/logger.js';
 import { container } from './core/container.js';
-import { cleanupManager, browserManager } from './core/resource-manager.js';
+import { cleanupManager } from './core/resource-manager.js';
 import { isVisualMCPError, ValidationError } from './core/errors.js';
-
-// Service imports
-import { ScreenshotEngine } from './screenshot/puppeteer.js';
-import { ComparisonEngine } from './comparison/differ.js';
-import { FeedbackGenerator } from './analysis/feedback-generator.js';
-import { MonitoringManager } from './screenshot/monitoring.js';
+import { registerCoreServices, initializeCoreServices } from './core/factories.js';
 
 // Interface imports
 import {
@@ -28,11 +23,11 @@ import {
 
 // Handler imports
 import {
-  handleTakeScreenshot,
-  handleCompareVisuals,
-  handleAnalyzeFeedback,
-  handleStartMonitoring,
-  handleStopMonitoring
+  createTakeScreenshotHandler,
+  createCompareVisualsHandler,
+  createAnalyzeFeedbackHandler,
+  createStartMonitoringHandler,
+  createStopMonitoringHandler
 } from './handlers/index.js';
 
 const logger = createLogger('MCPServer');
@@ -42,6 +37,15 @@ const logger = createLogger('MCPServer');
  */
 class VisualMCPServer {
   private server: Server;
+  private transport: StdioServerTransport | null = null;
+  private initialized = false;
+  private initializationPromise: Promise<void> | null = null;
+  private handlersConfigured = false;
+  private takeScreenshotHandler?: ReturnType<typeof createTakeScreenshotHandler>;
+  private compareVisualsHandler?: ReturnType<typeof createCompareVisualsHandler>;
+  private analyzeFeedbackHandler?: ReturnType<typeof createAnalyzeFeedbackHandler>;
+  private startMonitoringHandler?: ReturnType<typeof createStartMonitoringHandler>;
+  private stopMonitoringHandler?: ReturnType<typeof createStopMonitoringHandler>;
 
   constructor() {
     logger.info('Initializing Visual MCP Server', {
@@ -61,50 +65,30 @@ class VisualMCPServer {
       }
     );
 
-    this.setupDependencies();
-    this.setupToolHandlers();
     this.setupErrorHandling();
 
     logger.info('Visual MCP Server initialized successfully');
   }
 
-  private setupDependencies(): void {
-    logger.debug('Setting up dependency injection');
-
-    // Register core services as singletons
-    container.registerInstance(SERVICE_TOKENS.BROWSER_MANAGER, browserManager);
-
-    container.registerSingleton<IScreenshotEngine>(SERVICE_TOKENS.SCREENSHOT_ENGINE, () => {
-      logger.debug('Creating ScreenshotEngine instance');
-      return new ScreenshotEngine(browserManager);
-    });
-
-    container.registerSingleton<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE, () => {
-      logger.debug('Creating ComparisonEngine instance');
-      return new ComparisonEngine();
-    });
-
-    container.registerSingleton<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
-      logger.debug('Creating FeedbackGenerator instance');
-      return new FeedbackGenerator();
-    });
-
-    container.registerSingleton<IMonitoringManager>(SERVICE_TOKENS.MONITORING_MANAGER, () => {
-      logger.debug('Creating MonitoringManager instance');
-      const screenshotEngine = container.resolve<IScreenshotEngine>(
-        SERVICE_TOKENS.SCREENSHOT_ENGINE
-      );
-      const comparisonEngine = container.resolve<IComparisonEngine>(
-        SERVICE_TOKENS.COMPARISON_ENGINE
-      );
-      return new MonitoringManager(screenshotEngine, comparisonEngine);
-    });
-
-    logger.debug('Dependency injection setup completed');
-  }
-
   private setupToolHandlers(): void {
+    if (this.handlersConfigured) {
+      return;
+    }
+
     logger.debug('Setting up MCP tool handlers');
+
+    const screenshotEngine = container.resolve<IScreenshotEngine>(SERVICE_TOKENS.SCREENSHOT_ENGINE);
+    const comparisonEngine = container.resolve<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE);
+    const feedbackAnalyzer = container.resolve<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER);
+    const monitoringManager = container.resolve<IMonitoringManager>(
+      SERVICE_TOKENS.MONITORING_MANAGER
+    );
+
+    this.takeScreenshotHandler = createTakeScreenshotHandler(screenshotEngine);
+    this.compareVisualsHandler = createCompareVisualsHandler(comparisonEngine);
+    this.analyzeFeedbackHandler = createAnalyzeFeedbackHandler(feedbackAnalyzer);
+    this.startMonitoringHandler = createStartMonitoringHandler(monitoringManager);
+    this.stopMonitoringHandler = createStopMonitoringHandler(monitoringManager);
 
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -250,7 +234,8 @@ class VisualMCPServer {
       ]
     }));
 
-    this.server.setRequestHandler(CallToolRequestSchema, async request => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: any): Promise<any> => {
       const startTime = Date.now();
       logger.info('Tool call received', {
         tool: request.params.name,
@@ -260,19 +245,19 @@ class VisualMCPServer {
       try {
         switch (request.params.name) {
           case 'take_screenshot':
-            return await handleTakeScreenshot(request);
+            return await this.takeScreenshotHandler!(request);
 
           case 'compare_visuals':
-            return await handleCompareVisuals(request);
+            return await this.compareVisualsHandler!(request);
 
           case 'analyze_ui_feedback':
-            return await handleAnalyzeFeedback(request);
+            return await this.analyzeFeedbackHandler!(request);
 
           case 'start_monitoring':
-            return await handleStartMonitoring(request);
+            return await this.startMonitoringHandler!(request);
 
           case 'stop_monitoring':
-            return await handleStopMonitoring(request);
+            return await this.stopMonitoringHandler!(request);
 
           default:
             throw new ValidationError(`Unknown tool: ${request.params.name}`);
@@ -297,6 +282,27 @@ class VisualMCPServer {
     });
 
     logger.debug('MCP tool handlers setup completed');
+    this.handlersConfigured = true;
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    if (!this.initializationPromise) {
+      this.initializationPromise = (async () => {
+        logger.debug('Initializing core services');
+        registerCoreServices();
+        await initializeCoreServices();
+        this.setupToolHandlers();
+        this.initialized = true;
+      })().finally(() => {
+        this.initializationPromise = null;
+      });
+    }
+
+    await this.initializationPromise;
   }
 
   private formatErrorResponse(error: unknown) {
@@ -351,14 +357,17 @@ class VisualMCPServer {
     };
 
     // Register cleanup handler for server
+    cleanupManager.removeCleanupHandler('MCPServer');
     cleanupManager.registerCleanupHandler('MCPServer', async () => {
       logger.info('Shutting down MCP server');
       // Server cleanup would go here if needed
     });
   }
 
-  async run(): Promise<void> {
+  async run(): Promise<{ stop: () => Promise<void> }> {
     try {
+      await this.ensureInitialized();
+
       logger.info('Starting Visual MCP Server', {
         config: {
           outputDir: config.outputDir,
@@ -367,10 +376,19 @@ class VisualMCPServer {
         }
       });
 
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
+      this.transport = new StdioServerTransport();
+      await this.server.connect(this.transport);
 
       logger.info('Visual MCP Server running on stdio');
+
+      return {
+        stop: async () => {
+          logger.info('Stopping Visual MCP Server');
+          await this.server.close();
+          await cleanupManager.cleanup();
+          this.transport = null;
+        }
+      };
     } catch (error) {
       logger.error('Failed to start MCP server', error as Error);
       throw error;

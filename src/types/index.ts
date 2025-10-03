@@ -199,3 +199,39 @@ export type CompareVisualsParams = z.infer<typeof CompareVisualsParamsSchema>;
 export type AnalyzeFeedbackParams = z.infer<typeof AnalyzeFeedbackParamsSchema>;
 export type StartMonitoringParams = z.infer<typeof StartMonitoringParamsSchema>;
 export type StopMonitoringParams = z.infer<typeof StopMonitoringParamsSchema>;
+
+// MCP Request/Response types
+export interface MCPToolRequest {
+  params: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    _meta?: unknown;
+  };
+  method: string;
+}
+
+export interface MCPToolResponse {
+  content: Array<{
+    type: 'text';
+    text: string;
+  }>;
+  isError?: boolean;
+  _meta?: unknown;
+}
+
+export type MCPToolHandler = (request: MCPToolRequest) => Promise<MCPToolResponse>;
+
+// Monitoring response types
+export interface MonitoringStartResponse {
+  sessionId: string;
+  message: string;
+}
+
+export interface MonitoringSummary {
+  sessionId: string;
+  duration: string;
+  totalScreenshots: number;
+  significantChanges: number;
+  averageDifference: number;
+  endTime: string;
+}

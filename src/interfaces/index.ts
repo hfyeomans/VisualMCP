@@ -14,6 +14,7 @@ import {
  * Interface for screenshot capture functionality
  */
 export interface IScreenshotEngine {
+  init(): Promise<void>;
   takeScreenshot(target: ScreenshotTarget, options?: ScreenshotOptions): Promise<ScreenshotResult>;
   listScreenshots(): Promise<string[]>;
   deleteScreenshot(filepath: string): Promise<boolean>;
@@ -26,6 +27,7 @@ export interface IScreenshotEngine {
  * Interface for image comparison functionality
  */
 export interface IComparisonEngine {
+  init(): Promise<void>;
   compare(
     currentImagePath: string,
     referenceImagePath: string,
@@ -62,9 +64,9 @@ export interface IMonitoringManager {
  * Interface for browser management
  */
 export interface IBrowserManager {
-  getBrowser(): Promise<any>; // Browser from puppeteer
-  createPage(): Promise<any>; // Page from puppeteer
-  closePage(page: any): Promise<void>;
+  getBrowser(): Promise<unknown>; // Browser from puppeteer
+  createPage(): Promise<unknown>; // Page from puppeteer
+  closePage(page: unknown): Promise<void>;
   cleanup(): Promise<void>;
   isHealthy(): Promise<boolean>;
 }
@@ -73,8 +75,8 @@ export interface IBrowserManager {
  * Interface for image processing utilities
  */
 export interface IImageProcessor {
-  loadImage(imagePath: string): Promise<any>;
-  saveImage(imageData: any, outputPath: string): Promise<void>;
+  loadImage(imagePath: string): Promise<unknown>;
+  saveImage(imageData: unknown, outputPath: string): Promise<void>;
   resizeImage(imagePath: string, width: number, height: number): Promise<string>;
   convertFormat(imagePath: string, format: 'png' | 'jpeg', outputPath?: string): Promise<string>;
   getImageMetadata(imagePath: string): Promise<{
@@ -106,9 +108,9 @@ export interface IFileManager {
  * Interface for event handling
  */
 export interface IEventEmitter {
-  on(event: string, listener: (...args: any[]) => void): void;
-  emit(event: string, ...args: any[]): void;
-  removeListener(event: string, listener: (...args: any[]) => void): void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  emit(event: string, ...args: unknown[]): void;
+  removeListener(event: string, listener: (...args: unknown[]) => void): void;
   removeAllListeners(event?: string): void;
 }
 

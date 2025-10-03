@@ -87,6 +87,7 @@ pids
 
 # dotenv environment variables file
 .env*
+!.env.example
 
 # Microbundle cache
 .rpt2_cache/
@@ -145,6 +146,7 @@ archive/
 !.nvmrc
 !.eslintrc*
 !.prettierrc*
+!.env.example
 
 # Reference images (these should be committed when ready for production)
 # test-app/reference-designs/*.png

@@ -1,38 +1,47 @@
-import { container } from '../core/container.js';
 import { createLogger } from '../core/logger.js';
-import { SERVICE_TOKENS, IComparisonEngine } from '../interfaces/index.js';
-import { CompareVisualsParamsSchema } from '../types/index.js';
+import { IComparisonEngine } from '../interfaces/index.js';
+import {
+  CompareVisualsParamsSchema,
+  MCPToolHandler,
+  MCPToolRequest,
+  MCPToolResponse
+} from '../types/index.js';
 
 const logger = createLogger('ComparisonHandler');
 
-export async function handleCompareVisuals(request: any) {
-  const params = CompareVisualsParamsSchema.parse(request.params.arguments);
-  const comparisonEngine = container.resolve<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE);
+export type ComparisonHandler = MCPToolHandler;
 
-  logger.debug('Comparing images', {
-    currentImage: params.currentImage,
-    referenceImage: params.referenceImage,
-    tolerance: params.options?.tolerance
-  });
+export function createCompareVisualsHandler(
+  comparisonEngine: IComparisonEngine
+): ComparisonHandler {
+  return async function handleCompareVisuals(request: MCPToolRequest): Promise<MCPToolResponse> {
+    const params = CompareVisualsParamsSchema.parse(request.params.arguments);
 
-  const result = await comparisonEngine.compare(
-    params.currentImage,
-    params.referenceImage,
-    params.options
-  );
+    logger.debug('Comparing images', {
+      currentImage: params.currentImage,
+      referenceImage: params.referenceImage,
+      tolerance: params.options?.tolerance
+    });
 
-  logger.info('Visual comparison completed', {
-    differencePercentage: result.differencePercentage,
-    isMatch: result.isMatch,
-    regionsCount: result.regions.length
-  });
+    const result = await comparisonEngine.compare(
+      params.currentImage,
+      params.referenceImage,
+      params.options
+    );
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }
-    ]
+    logger.info('Visual comparison completed', {
+      differencePercentage: result.differencePercentage,
+      isMatch: result.isMatch,
+      regionsCount: result.regions.length
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
+    };
   };
 }

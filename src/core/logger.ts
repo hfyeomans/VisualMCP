@@ -9,7 +9,7 @@ export interface LogEntry {
   level: LogLevel;
   component: string;
   message: string;
-  data?: any;
+  data?: unknown;
   error?: Error;
 }
 
@@ -94,7 +94,7 @@ export class Logger {
     level: LogLevel,
     component: string,
     message: string,
-    data?: any,
+    data?: unknown,
     error?: Error
   ): void {
     if (!this.shouldLog(level)) return;
@@ -132,30 +132,30 @@ export class Logger {
     });
   }
 
-  public debug(component: string, message: string, data?: any): void {
+  public debug(component: string, message: string, data?: unknown): void {
     this.log('debug', component, message, data);
   }
 
-  public info(component: string, message: string, data?: any): void {
+  public info(component: string, message: string, data?: unknown): void {
     this.log('info', component, message, data);
   }
 
-  public warn(component: string, message: string, data?: any, error?: Error): void {
+  public warn(component: string, message: string, data?: unknown, error?: Error): void {
     this.log('warn', component, message, data, error);
   }
 
-  public error(component: string, message: string, error?: Error, data?: any): void {
+  public error(component: string, message: string, error?: Error, data?: unknown): void {
     this.log('error', component, message, data, error);
   }
 
   // Component-specific loggers
   public createComponentLogger(component: string) {
     return {
-      debug: (message: string, data?: any) => this.debug(component, message, data),
-      info: (message: string, data?: any) => this.info(component, message, data),
-      warn: (message: string, data?: any, error?: Error) =>
+      debug: (message: string, data?: unknown) => this.debug(component, message, data),
+      info: (message: string, data?: unknown) => this.info(component, message, data),
+      warn: (message: string, data?: unknown, error?: Error) =>
         this.warn(component, message, data, error),
-      error: (message: string, error?: Error, data?: any) =>
+      error: (message: string, error?: Error, data?: unknown) =>
         this.error(component, message, error, data)
     };
   }

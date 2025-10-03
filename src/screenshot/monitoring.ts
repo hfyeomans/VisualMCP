@@ -3,10 +3,15 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs-extra';
 import { MonitoringSession, MonitoringScreenshot, StartMonitoringParams } from '../types/index.js';
 import { IScreenshotEngine, IComparisonEngine } from '../interfaces/index.js';
+import { createLogger } from '../core/logger.js';
+import { ReferenceImageNotFoundError, SessionNotFoundError } from '../core/errors.js';
+
+const logger = createLogger('MonitoringManager');
 
 export class MonitoringManager extends EventEmitter {
   private sessions: Map<string, MonitoringSession> = new Map();
   private intervals: Map<string, NodeJS.Timeout> = new Map();
+  private activeCaptures = new Set<string>();
   private screenshotEngine: IScreenshotEngine;
   private comparisonEngine: IComparisonEngine;
 
@@ -29,27 +34,36 @@ export class MonitoringManager extends EventEmitter {
       screenshots: []
     };
 
-    // Validate reference image exists
     if (!(await fs.pathExists(params.referenceImage))) {
-      throw new Error(`Reference image not found: ${params.referenceImage}`);
+      const error = new ReferenceImageNotFoundError(params.referenceImage);
+      logger.error('Reference image not found', error, {
+        sessionId,
+        referenceImage: params.referenceImage
+      });
+      throw error;
     }
 
     this.sessions.set(sessionId, session);
 
     // Start monitoring interval
-    const intervalId = setInterval(async () => {
-      try {
-        await this.captureMonitoringScreenshot(sessionId);
-      } catch (error) {
-        console.error(`Error in monitoring session ${sessionId}:`, error);
+    const intervalMs = (params.interval || 5) * 1000;
+    const intervalId = setInterval(() => {
+      void this.captureMonitoringScreenshot(sessionId).catch(error => {
+        logger.error('Error during monitoring interval', error as Error, { sessionId });
         this.emit('monitoring_error', { sessionId, error });
-      }
-    }, params.interval * 1000);
+      });
+    }, intervalMs);
 
     this.intervals.set(sessionId, intervalId);
 
     // Take initial screenshot immediately
     await this.captureMonitoringScreenshot(sessionId);
+
+    logger.info('Monitoring session started', {
+      sessionId,
+      intervalSeconds: session.interval,
+      targetType: session.target.type
+    });
 
     this.emit('monitoring_started', { sessionId, session });
 
@@ -59,15 +73,10 @@ export class MonitoringManager extends EventEmitter {
   async stopMonitoring(sessionId: string): Promise<any> {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      throw new Error(`Monitoring session not found: ${sessionId}`);
+      throw new SessionNotFoundError(sessionId);
     }
 
-    // Clear interval
-    const intervalId = this.intervals.get(sessionId);
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.intervals.delete(sessionId);
-    }
+    this.clearInterval(sessionId);
 
     // Mark session as inactive
     session.isActive = false;
@@ -89,6 +98,12 @@ export class MonitoringManager extends EventEmitter {
     // Remove session
     this.sessions.delete(sessionId);
 
+    logger.info('Monitoring session stopped', {
+      sessionId,
+      duration: summary.duration,
+      totalScreenshots: summary.totalScreenshots
+    });
+
     this.emit('monitoring_stopped', { sessionId, summary });
 
     return summary;
@@ -99,6 +114,13 @@ export class MonitoringManager extends EventEmitter {
     if (!session || !session.isActive) {
       return;
     }
+
+    if (this.activeCaptures.has(sessionId)) {
+      logger.debug('Skipping capture while previous run is in progress', { sessionId });
+      return;
+    }
+
+    this.activeCaptures.add(sessionId);
 
     try {
       // Take screenshot
@@ -134,11 +156,10 @@ export class MonitoringManager extends EventEmitter {
 
         // Auto-generate feedback if enabled
         if (session.autoFeedback) {
-          // This would integrate with FeedbackAnalyzer
-          // For now, just log the change
-          console.log(
-            `Significant change detected in session ${sessionId}: ${comparison.differencePercentage}%`
-          );
+          logger.info('Significant change detected with autoFeedback enabled', {
+            sessionId,
+            difference: comparison.differencePercentage
+          });
         }
       }
 
@@ -147,8 +168,10 @@ export class MonitoringManager extends EventEmitter {
         screenshot: monitoringScreenshot
       });
     } catch (error) {
-      console.error(`Error capturing monitoring screenshot for session ${sessionId}:`, error);
+      logger.error('Error capturing monitoring screenshot', error as Error, { sessionId });
       throw error;
+    } finally {
+      this.activeCaptures.delete(sessionId);
     }
   }
 
@@ -201,6 +224,7 @@ export class MonitoringManager extends EventEmitter {
     if (session) {
       // Don't set isActive to false, just pause the interval
       this.emit('monitoring_paused', { sessionId });
+      logger.info('Monitoring session paused', { sessionId });
       return true;
     }
 
@@ -212,37 +236,57 @@ export class MonitoringManager extends EventEmitter {
     if (!session || !session.isActive) return false;
 
     // Restart the interval
-    const intervalId = setInterval(async () => {
-      try {
-        await this.captureMonitoringScreenshot(sessionId);
-      } catch (error) {
-        console.error(`Error in monitoring session ${sessionId}:`, error);
+    const intervalId = setInterval(() => {
+      void this.captureMonitoringScreenshot(sessionId).catch(error => {
+        logger.error('Error during monitoring interval', error as Error, { sessionId });
         this.emit('monitoring_error', { sessionId, error });
-      }
+      });
     }, session.interval * 1000);
 
     this.intervals.set(sessionId, intervalId);
+    logger.info('Monitoring session resumed', { sessionId });
     this.emit('monitoring_resumed', { sessionId });
 
     return true;
   }
 
   async cleanup(): Promise<void> {
+    logger.info('Cleaning up monitoring sessions', {
+      activeSessions: this.sessions.size,
+      activeIntervals: this.intervals.size
+    });
+
     // Stop all active monitoring sessions
-    for (const sessionId of this.sessions.keys()) {
-      try {
-        await this.stopMonitoring(sessionId);
-      } catch (error) {
-        console.error(`Error stopping monitoring session ${sessionId} during cleanup:`, error);
-      }
-    }
+    const sessionIds = Array.from(this.sessions.keys());
 
-    // Clear all intervals
-    for (const intervalId of this.intervals.values()) {
+    await Promise.allSettled(
+      sessionIds.map(async id => {
+        try {
+          await this.stopMonitoring(id);
+        } catch (error) {
+          logger.warn(
+            'Failed to stop monitoring session during cleanup',
+            { sessionId: id },
+            error as Error
+          );
+        }
+      })
+    );
+
+    for (const [sessionId, intervalId] of this.intervals.entries()) {
       clearInterval(intervalId);
+      this.intervals.delete(sessionId);
     }
 
-    this.intervals.clear();
     this.sessions.clear();
+    this.activeCaptures.clear();
+  }
+
+  private clearInterval(sessionId: string): void {
+    const intervalId = this.intervals.get(sessionId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      this.intervals.delete(sessionId);
+    }
   }
 }

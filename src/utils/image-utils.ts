@@ -1,4 +1,5 @@
 import fs from 'fs-extra';
+import path from 'path';
 import sharp from 'sharp';
 import { PNG } from 'pngjs';
 import { IImageProcessor } from '../interfaces/index.js';
@@ -144,8 +145,8 @@ export class ImageProcessor implements IImageProcessor {
    * Generate a temporary file path with suffix
    */
   private generateTempPath(originalPath: string, suffix: string): string {
-    const parsed = require('path').parse(originalPath);
-    return require('path').join(parsed.dir, `${parsed.name}${suffix}${parsed.ext}`);
+    const parsed = path.parse(originalPath);
+    return path.join(parsed.dir, `${parsed.name}${suffix}${parsed.ext}`);
   }
 
   /**
