@@ -151,7 +151,7 @@ export class ConfigurationError extends VisualMCPError {
 }
 
 export class InvalidConfigurationError extends ConfigurationError {
-  constructor(field: string, value: any, reason: string) {
+  constructor(field: string, value: unknown, reason: string) {
     super(`Invalid configuration for ${field}: ${value} - ${reason}`, 'INVALID_CONFIGURATION');
   }
 }

@@ -9,17 +9,38 @@ import {
   DifferenceRegion,
   ImageMetadata
 } from '../types/index.js';
+import { createLogger } from '../core/logger.js';
+
+const logger = createLogger('ComparisonEngine');
 
 export class ComparisonEngine {
   private outputDir: string;
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
     this.outputDir = path.join(process.cwd(), 'comparisons');
-    this.ensureOutputDirectory();
   }
 
-  private async ensureOutputDirectory() {
-    await fs.ensureDir(this.outputDir);
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    if (!this.initPromise) {
+      this.initPromise = fs
+        .ensureDir(this.outputDir)
+        .then(() => {
+          this.initialized = true;
+        })
+        .finally(() => {
+          this.initPromise = null;
+        });
+    }
+
+    await this.initPromise;
+  }
+
+  async init(): Promise<void> {
+    await this.ensureInitialized();
   }
 
   async compare(
@@ -27,6 +48,8 @@ export class ComparisonEngine {
     referenceImagePath: string,
     options: ComparisonOptions = {}
   ): Promise<ComparisonResult> {
+    await this.ensureInitialized();
+
     // Validate input files exist
     if (!(await fs.pathExists(currentImagePath))) {
       throw new Error(`Current image not found: ${currentImagePath}`);
@@ -329,23 +352,27 @@ export class ComparisonEngine {
   }
 
   async listComparisons(): Promise<string[]> {
+    await this.ensureInitialized();
+
     try {
       const files = await fs.readdir(this.outputDir);
       return files
         .filter(file => file.startsWith('diff_') && file.endsWith('.png'))
         .map(file => path.join(this.outputDir, file));
     } catch (error) {
-      console.error('Error listing comparisons:', error);
+      logger.error('Error listing comparisons', error as Error);
       return [];
     }
   }
 
   async deleteComparison(filepath: string): Promise<boolean> {
+    await this.ensureInitialized();
+
     try {
       await fs.remove(filepath);
       return true;
     } catch (error) {
-      console.error('Error deleting comparison:', error);
+      logger.error('Error deleting comparison', error as Error);
       return false;
     }
   }
@@ -356,6 +383,7 @@ export class ComparisonEngine {
 
   setOutputDirectory(dir: string): void {
     this.outputDir = dir;
-    this.ensureOutputDirectory();
+    this.initialized = false;
+    this.initPromise = null;
   }
 }

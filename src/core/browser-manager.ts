@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import puppeteer, { Browser, Page, PuppeteerLaunchOptions } from 'puppeteer';
-import { IBrowserManager } from '../interfaces/index.js';
+import { IBrowserManager, ICleanupManager } from '../interfaces/index.js';
 import { BrowserLaunchError } from './errors.js';
 import { config } from './config.js';
 import { createLogger } from './logger.js';
@@ -26,7 +26,7 @@ export class BrowserManager extends EventEmitter implements IBrowserManager {
   }
 
   // Register cleanup handler method (called externally)
-  registerCleanup(cleanupManager: any): void {
+  registerCleanup(cleanupManager: ICleanupManager): void {
     cleanupManager.registerCleanupHandler('BrowserManager', () => this.cleanup());
   }
 
