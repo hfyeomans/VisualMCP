@@ -10,6 +10,8 @@ import {
   ImageMetadata
 } from '../types/index.js';
 import { createLogger } from '../core/logger.js';
+import { IImageProcessor } from '../interfaces/index.js';
+import { imageProcessor } from '../utils/image-utils.js';
 
 const logger = createLogger('ComparisonEngine');
 
@@ -18,7 +20,7 @@ export class ComparisonEngine {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
-  constructor() {
+  constructor(private readonly imageHelper: IImageProcessor = imageProcessor) {
     this.outputDir = path.join(process.cwd(), 'comparisons');
   }
 
@@ -62,12 +64,10 @@ export class ComparisonEngine {
     const currentMetadata = await this.getImageMetadata(currentImagePath);
     const referenceMetadata = await this.getImageMetadata(referenceImagePath);
 
-    // Resize images to match if needed
-    const { current, reference } = await this.prepareImagesForComparison(
+    // Resize images to match if needed (delegate to ImageProcessor)
+    const { current, reference } = await this.imageHelper.prepareImagesForComparison(
       currentImagePath,
-      referenceImagePath,
-      currentMetadata,
-      referenceMetadata
+      referenceImagePath
     );
 
     // Load images as PNG buffers
@@ -148,61 +148,6 @@ export class ComparisonEngine {
       size: stats.size,
       timestamp: stats.mtime.toISOString()
     };
-  }
-
-  private async prepareImagesForComparison(
-    currentImagePath: string,
-    referenceImagePath: string,
-    currentMetadata: ImageMetadata,
-    referenceMetadata: ImageMetadata
-  ): Promise<{
-    current: { path: string; isTemporary: boolean };
-    reference: { path: string; isTemporary: boolean };
-  }> {
-    const result = {
-      current: { path: currentImagePath, isTemporary: false },
-      reference: { path: referenceImagePath, isTemporary: false }
-    };
-
-    // Check if images have different dimensions
-    if (
-      currentMetadata.width !== referenceMetadata.width ||
-      currentMetadata.height !== referenceMetadata.height
-    ) {
-      // Determine target dimensions (use the larger image as reference)
-      const targetWidth = Math.max(currentMetadata.width, referenceMetadata.width);
-      const targetHeight = Math.max(currentMetadata.height, referenceMetadata.height);
-
-      // Resize current image if needed
-      if (currentMetadata.width !== targetWidth || currentMetadata.height !== targetHeight) {
-        const tempCurrentPath = path.join(this.outputDir, `temp_current_${Date.now()}.png`);
-        await sharp(currentImagePath)
-          .resize(targetWidth, targetHeight, {
-            fit: 'contain',
-            background: { r: 255, g: 255, b: 255, alpha: 1 }
-          })
-          .png()
-          .toFile(tempCurrentPath);
-
-        result.current = { path: tempCurrentPath, isTemporary: true };
-      }
-
-      // Resize reference image if needed
-      if (referenceMetadata.width !== targetWidth || referenceMetadata.height !== targetHeight) {
-        const tempReferencePath = path.join(this.outputDir, `temp_reference_${Date.now()}.png`);
-        await sharp(referenceImagePath)
-          .resize(targetWidth, targetHeight, {
-            fit: 'contain',
-            background: { r: 255, g: 255, b: 255, alpha: 1 }
-          })
-          .png()
-          .toFile(tempReferencePath);
-
-        result.reference = { path: tempReferencePath, isTemporary: true };
-      }
-    }
-
-    return result;
   }
 
   private async loadImageAsPng(imagePath: string): Promise<PNG> {

@@ -45,6 +45,7 @@ export class Logger {
       const logDir = path.dirname(this.logFile);
       await fs.ensureDir(logDir);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Failed to create log directory:', error);
     }
   }
@@ -86,6 +87,7 @@ export class Logger {
       const message = this.formatMessage(entry) + '\n';
       await fs.appendFile(this.logFile, message);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Failed to write to log file:', error);
     }
   }
@@ -111,6 +113,7 @@ export class Logger {
     const formattedMessage = this.formatMessage(entry);
 
     // Console output with colors
+    /* eslint-disable no-console */
     switch (level) {
       case 'debug':
         console.log(`\x1b[36m${formattedMessage}\x1b[0m`); // Cyan
@@ -125,6 +128,7 @@ export class Logger {
         console.error(`\x1b[31m${formattedMessage}\x1b[0m`); // Red
         break;
     }
+    /* eslint-enable no-console */
 
     // File output (async, don't wait)
     this.writeToFile(entry).catch(() => {

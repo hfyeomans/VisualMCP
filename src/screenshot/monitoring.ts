@@ -1,7 +1,12 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs-extra';
-import { MonitoringSession, MonitoringScreenshot, StartMonitoringParams } from '../types/index.js';
+import {
+  MonitoringSession,
+  MonitoringScreenshot,
+  MonitoringSummary,
+  StartMonitoringParams
+} from '../types/index.js';
 import { IScreenshotEngine, IComparisonEngine } from '../interfaces/index.js';
 import { createLogger } from '../core/logger.js';
 import { ReferenceImageNotFoundError, SessionNotFoundError } from '../core/errors.js';
@@ -70,7 +75,7 @@ export class MonitoringManager extends EventEmitter {
     return sessionId;
   }
 
-  async stopMonitoring(sessionId: string): Promise<any> {
+  async stopMonitoring(sessionId: string): Promise<MonitoringSummary> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new SessionNotFoundError(sessionId);

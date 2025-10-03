@@ -34,7 +34,7 @@ export function registerCoreServices(): void {
   });
 
   container.registerSingleton<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE, () => {
-    return new ComparisonEngine();
+    return new ComparisonEngine(imageProcessor);
   });
 
   container.registerSingleton<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
