@@ -1,10 +1,10 @@
-import { ColorAnalyzer, ColorAnalysis } from './color-analyzer.js';
-import { LayoutAnalyzer, LayoutAnalysis } from './layout-analyzer.js';
 import { IFeedbackAnalyzer } from '../interfaces/index.js';
 import { FeedbackOptions, FeedbackResult, Issue, Suggestion } from '../types/index.js';
 import { createLogger } from '../core/logger.js';
 import { DiffImageNotFoundError, AnalysisError } from '../core/errors.js';
 import { fileManager } from '../utils/file-utils.js';
+import { AnalyzerRegistry } from './analyzer-interface.js';
+import { MetadataPersistenceService } from './metadata-persistence.js';
 
 const logger = createLogger('FeedbackGenerator');
 
@@ -12,13 +12,10 @@ const logger = createLogger('FeedbackGenerator');
  * Orchestrates analysis and generates comprehensive feedback
  */
 export class FeedbackGenerator implements IFeedbackAnalyzer {
-  private colorAnalyzer: ColorAnalyzer;
-  private layoutAnalyzer: LayoutAnalyzer;
-
-  constructor(colorAnalyzer?: ColorAnalyzer, layoutAnalyzer?: LayoutAnalyzer) {
-    this.colorAnalyzer = colorAnalyzer || new ColorAnalyzer();
-    this.layoutAnalyzer = layoutAnalyzer || new LayoutAnalyzer();
-  }
+  constructor(
+    private readonly analyzerRegistry: AnalyzerRegistry,
+    private readonly metadataPersistence?: MetadataPersistenceService
+  ) {}
 
   async analyzeDifferences(
     diffImagePath: string,
@@ -40,31 +37,83 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       const context = options.context || '';
       const suggestionsType = options.suggestionsType || 'both';
 
-      // Perform analysis based on priorities
-      const analyses = await this.performAnalyses(diffImagePath, priorities);
+      // Get analyzers for requested priorities
+      const analyzers = this.analyzerRegistry.getForPriorities(priorities);
 
-      // Generate issues and suggestions
-      const issues = await this.generateIssues(analyses, priorities);
-      const suggestions = await this.generateSuggestions(issues, analyses, suggestionsType);
+      if (analyzers.length === 0) {
+        logger.warn('No analyzers available for priorities', { priorities });
+      }
 
-      // Calculate confidence based on analysis quality
-      const confidence = this.calculateConfidence(issues, analyses);
+      // Run all analyzers
+      const allIssues: Issue[] = [];
+      const allSuggestions: Suggestion[] = [];
+
+      for (const analyzer of analyzers) {
+        try {
+          logger.debug('Running analyzer', { type: analyzer.type });
+
+          // Run analysis
+          const analysis = await analyzer.analyze(diffImagePath);
+
+          // Detect issues
+          const issues = analyzer.detectIssues(analysis);
+          allIssues.push(...issues);
+
+          // Generate suggestions
+          const suggestions = analyzer.generateSuggestions(issues);
+          allSuggestions.push(...suggestions);
+
+          logger.debug('Analyzer completed', {
+            type: analyzer.type,
+            issuesCount: issues.length,
+            suggestionsCount: suggestions.length
+          });
+        } catch (error) {
+          logger.warn(
+            `Analyzer ${analyzer.type} failed, continuing without it`,
+            { diffImagePath },
+            error as Error
+          );
+        }
+      }
+
+      // Filter suggestions by type
+      const filteredSuggestions =
+        suggestionsType === 'both'
+          ? allSuggestions
+          : allSuggestions.filter(s => s.type === suggestionsType);
+
+      // Deduplicate and sort suggestions
+      const uniqueSuggestions = this.deduplicateSuggestions(filteredSuggestions);
+      uniqueSuggestions.sort((a, b) => a.priority - b.priority);
+
+      // Calculate confidence
+      const confidence = this.calculateConfidence(allIssues, analyzers.length);
 
       // Generate summary
-      const summary = this.generateSummary(issues, suggestions, context);
+      const summary = this.generateSummary(allIssues, uniqueSuggestions, context);
 
       const result: FeedbackResult = {
         summary,
-        issues,
-        suggestions,
+        issues: allIssues,
+        suggestions: uniqueSuggestions,
         priority: priorities.join(', '),
         confidence
       };
 
+      // Persist metadata if enabled
+      if (this.metadataPersistence) {
+        try {
+          await this.metadataPersistence.saveMetadata(diffImagePath, result);
+        } catch (error) {
+          logger.warn('Failed to persist metadata', { diffImagePath }, error as Error);
+        }
+      }
+
       logger.info('Feedback analysis completed', {
         diffImagePath,
-        issuesCount: issues.length,
-        suggestionsCount: suggestions.length,
+        issuesCount: allIssues.length,
+        suggestionsCount: uniqueSuggestions.length,
         confidence
       });
 
@@ -83,214 +132,6 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     }
   }
 
-  private async performAnalyses(
-    diffImagePath: string,
-    priorities: string[]
-  ): Promise<{
-    color?: ColorAnalysis;
-    layout?: LayoutAnalysis;
-  }> {
-    const analyses: { color?: ColorAnalysis; layout?: LayoutAnalysis } = {};
-
-    // Perform color analysis if requested
-    if (priorities.includes('colors')) {
-      try {
-        logger.debug('Performing color analysis');
-        analyses.color = await this.colorAnalyzer.analyzeColors(diffImagePath);
-      } catch (error) {
-        logger.warn(
-          'Color analysis failed, continuing without it',
-          { diffImagePath },
-          error as Error
-        );
-      }
-    }
-
-    // Perform layout analysis if requested
-    if (
-      priorities.includes('layout') ||
-      priorities.includes('spacing') ||
-      priorities.includes('typography')
-    ) {
-      try {
-        logger.debug('Performing layout analysis');
-        analyses.layout = await this.layoutAnalyzer.analyzeLayout(diffImagePath);
-      } catch (error) {
-        logger.warn(
-          'Layout analysis failed, continuing without it',
-          { diffImagePath },
-          error as Error
-        );
-      }
-    }
-
-    return analyses;
-  }
-
-  private async generateIssues(
-    analyses: { color?: ColorAnalysis; layout?: LayoutAnalysis },
-    priorities: string[]
-  ): Promise<Issue[]> {
-    const issues: Issue[] = [];
-
-    // Generate color issues
-    if (analyses.color && priorities.includes('colors')) {
-      const colorIssues = this.colorAnalyzer.detectColorIssues(analyses.color);
-      issues.push(
-        ...colorIssues.map(issue => ({
-          type: issue.type,
-          severity: issue.severity,
-          description: issue.description
-        }))
-      );
-    }
-
-    // Generate layout issues
-    if (analyses.layout) {
-      if (priorities.includes('layout')) {
-        // Add layout shift issues
-        for (const shift of analyses.layout.layoutShifts) {
-          if (shift.region) {
-            issues.push({
-              type: 'layout',
-              severity: shift.severity,
-              description: shift.description,
-              location: shift.region
-            });
-          }
-        }
-
-        // Add alignment issues
-        for (const alignment of analyses.layout.alignmentIssues) {
-          if (alignment.region) {
-            issues.push({
-              type: 'layout',
-              severity: 'medium',
-              description: alignment.description,
-              location: alignment.region
-            });
-          }
-        }
-      }
-
-      if (priorities.includes('spacing')) {
-        // Add spacing issues
-        for (const spacing of analyses.layout.spacingIssues) {
-          issues.push({
-            type: 'spacing',
-            severity: 'low',
-            description: spacing.description,
-            location: spacing.region
-          });
-        }
-      }
-
-      if (priorities.includes('typography')) {
-        // Add typography issues (simplified detection based on region characteristics)
-        for (const region of analyses.layout.regions) {
-          if (region.height < 30 && region.width > 100) {
-            issues.push({
-              type: 'typography',
-              severity: 'medium',
-              description: 'Potential text rendering differences detected',
-              location: region
-            });
-          }
-        }
-      }
-    }
-
-    logger.debug('Issues generated', {
-      totalCount: issues.length,
-      byType: this.groupIssuesByType(issues)
-    });
-
-    return issues;
-  }
-
-  private async generateSuggestions(
-    issues: Issue[],
-    analyses: { color?: ColorAnalysis; layout?: LayoutAnalysis },
-    suggestionsType: 'css' | 'general' | 'both'
-  ): Promise<Suggestion[]> {
-    let suggestions: Suggestion[] = [];
-
-    // Generate color-based suggestions
-    if (analyses.color) {
-      const colorSuggestions = this.colorAnalyzer.generateColorSuggestions(
-        issues.filter(issue => issue.type === 'colors')
-      );
-      suggestions.push(
-        ...colorSuggestions.filter(s => suggestionsType === 'both' || s.type === suggestionsType)
-      );
-    }
-
-    // Generate layout-based suggestions
-    if (analyses.layout) {
-      const layoutSuggestions = this.layoutAnalyzer.generateLayoutSuggestions(analyses.layout);
-      suggestions.push(
-        ...layoutSuggestions.filter(s => suggestionsType === 'both' || s.type === suggestionsType)
-      );
-    }
-
-    // Generate generic suggestions based on issue types
-    const genericSuggestions = this.generateGenericSuggestions(issues, suggestionsType);
-    suggestions.push(...genericSuggestions);
-
-    // Sort by priority and remove duplicates
-    suggestions = this.deduplicateSuggestions(suggestions);
-    suggestions.sort((a, b) => a.priority - b.priority);
-
-    logger.debug('Suggestions generated', {
-      totalCount: suggestions.length,
-      byType: suggestions.reduce(
-        (acc, s) => {
-          acc[s.type] = (acc[s.type] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      )
-    });
-
-    return suggestions;
-  }
-
-  private generateGenericSuggestions(
-    issues: Issue[],
-    suggestionsType: 'css' | 'general' | 'both'
-  ): Suggestion[] {
-    const suggestions: Suggestion[] = [];
-    const issueTypes = new Set(issues.map(i => i.type));
-
-    // Generic typography suggestions
-    if (
-      issueTypes.has('typography') &&
-      (suggestionsType === 'general' || suggestionsType === 'both')
-    ) {
-      suggestions.push({
-        type: 'general',
-        title: 'Typography Review',
-        description: 'Check font family, size, weight, and line height consistency',
-        priority: 2
-      });
-    }
-
-    // Generic content suggestions
-    if (
-      issues.some(i => i.description.includes('content')) &&
-      (suggestionsType === 'general' || suggestionsType === 'both')
-    ) {
-      suggestions.push({
-        type: 'general',
-        title: 'Content Review',
-        description: 'Review text content, images, and other media for accuracy',
-        priority: 3
-      });
-    }
-
-    return suggestions;
-  }
-
   private deduplicateSuggestions(suggestions: Suggestion[]): Suggestion[] {
     const seen = new Set<string>();
     return suggestions.filter(suggestion => {
@@ -303,10 +144,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     });
   }
 
-  private calculateConfidence(
-    issues: Issue[],
-    analyses: { color?: ColorAnalysis; layout?: LayoutAnalysis }
-  ): number {
+  private calculateConfidence(issues: Issue[], analyzersCount: number): number {
     let confidence = 100;
 
     // Reduce confidence based on number of issues
@@ -330,15 +168,15 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
 
     confidence -= severityPenalty;
 
-    // Reduce confidence if analyses failed
-    if (!analyses.color && !analyses.layout) {
+    // Reduce confidence if no analyzers ran
+    if (analyzersCount === 0) {
       confidence -= 30;
-    } else if (!analyses.color || !analyses.layout) {
-      confidence -= 15;
+    } else if (analyzersCount === 1) {
+      confidence -= 10;
     }
 
-    // Boost confidence if we have good data
-    if (analyses.color && analyses.layout) {
+    // Boost confidence if we have multiple analyzers
+    if (analyzersCount >= 2) {
       confidence += 5;
     }
 
@@ -375,15 +213,5 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     summary += ` ${suggestions.length} actionable suggestion${suggestions.length > 1 ? 's' : ''} provided for improvement.`;
 
     return summary;
-  }
-
-  private groupIssuesByType(issues: Issue[]): Record<string, number> {
-    return issues.reduce(
-      (acc, issue) => {
-        acc[issue.type] = (acc[issue.type] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
   }
 }

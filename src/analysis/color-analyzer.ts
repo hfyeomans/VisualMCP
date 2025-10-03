@@ -2,6 +2,8 @@ import sharp from 'sharp';
 import { createLogger } from '../core/logger.js';
 import { ImageUtils } from '../utils/image-utils.js';
 import { AnalysisError } from '../core/errors.js';
+import { Issue, Suggestion } from '../types/index.js';
+import { IAnalyzer } from './analyzer-interface.js';
 
 const logger = createLogger('ColorAnalyzer');
 
@@ -14,11 +16,22 @@ export interface ColorAnalysis {
   yellowPixels: number;
 }
 
+export interface ColorAnalyzerThresholds {
+  lowContrastThreshold: number;
+  highRedPixelPercentage: number;
+  lowColorDiversityThreshold: number;
+  veryBrightThreshold: number;
+  veryDarkThreshold: number;
+}
+
 /**
  * Handles color analysis of images for visual feedback
  */
-export class ColorAnalyzer {
-  async analyzeColors(imagePath: string): Promise<ColorAnalysis> {
+export class ColorAnalyzer implements IAnalyzer<ColorAnalysis> {
+  readonly type = 'color';
+
+  constructor(private readonly thresholds: ColorAnalyzerThresholds) {}
+  async analyze(imagePath: string): Promise<ColorAnalysis> {
     try {
       logger.debug('Starting color analysis', { imagePath });
 
@@ -103,18 +116,14 @@ export class ColorAnalyzer {
   /**
    * Detect color-related issues from analysis results
    */
-  detectColorIssues(analysis: ColorAnalysis): Array<{
-    type: string;
-    severity: 'low' | 'medium' | 'high' | 'critical';
-    description: string;
-  }> {
-    const issues = [];
+  detectIssues(analysis: ColorAnalysis): Issue[] {
+    const issues: Issue[] = [];
 
     // Low contrast issue
-    if (analysis.contrast < 50) {
+    if (analysis.contrast < this.thresholds.lowContrastThreshold) {
       issues.push({
         type: 'colors',
-        severity: 'low' as const,
+        severity: 'low',
         description: `Low color contrast detected (${Math.round(analysis.contrast)})`
       });
     }
@@ -122,34 +131,34 @@ export class ColorAnalyzer {
     // Significant red differences (likely visual changes)
     const redPercentage =
       (analysis.redPixels / (analysis.redPixels + analysis.yellowPixels + 1000)) * 100;
-    if (redPercentage > 10) {
+    if (redPercentage > this.thresholds.highRedPixelPercentage) {
       issues.push({
         type: 'colors',
-        severity: 'high' as const,
+        severity: 'high',
         description: `Significant color differences detected (${Math.round(redPercentage)}% red pixels)`
       });
     }
 
     // Low color diversity (potentially washed out image)
-    if (analysis.colorDiversity < 0.1) {
+    if (analysis.colorDiversity < this.thresholds.lowColorDiversityThreshold) {
       issues.push({
         type: 'colors',
-        severity: 'medium' as const,
+        severity: 'medium',
         description: 'Low color diversity detected, image may be washed out'
       });
     }
 
     // Very bright or very dark images
-    if (analysis.brightness > 240) {
+    if (analysis.brightness > this.thresholds.veryBrightThreshold) {
       issues.push({
         type: 'colors',
-        severity: 'medium' as const,
+        severity: 'medium',
         description: 'Image is very bright, may cause visibility issues'
       });
-    } else if (analysis.brightness < 15) {
+    } else if (analysis.brightness < this.thresholds.veryDarkThreshold) {
       issues.push({
         type: 'colors',
-        severity: 'medium' as const,
+        severity: 'medium',
         description: 'Image is very dark, may cause visibility issues'
       });
     }
@@ -168,16 +177,8 @@ export class ColorAnalyzer {
   /**
    * Generate color-specific feedback and suggestions
    */
-  generateColorSuggestions(
-    issues: Array<{ type: string; severity: string; description: string }>
-  ): Array<{
-    type: 'css' | 'general';
-    title: string;
-    description: string;
-    code?: string;
-    priority: number;
-  }> {
-    const suggestions = [];
+  generateSuggestions(issues: Issue[]): Suggestion[] {
+    const suggestions: Suggestion[] = [];
     const colorIssues = issues.filter(issue => issue.type === 'colors');
 
     for (const issue of colorIssues) {

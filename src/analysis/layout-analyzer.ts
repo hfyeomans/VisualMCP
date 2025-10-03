@@ -1,7 +1,8 @@
 import sharp from 'sharp';
 import { createLogger } from '../core/logger.js';
 import { AnalysisError } from '../core/errors.js';
-import { DifferenceRegion } from '../types/index.js';
+import { DifferenceRegion, Issue, Suggestion } from '../types/index.js';
+import { IAnalyzer } from './analyzer-interface.js';
 
 const logger = createLogger('LayoutAnalyzer');
 
@@ -25,11 +26,23 @@ export interface LayoutAnalysis {
   }>;
 }
 
+export interface LayoutAnalyzerThresholds {
+  minRegionSize: number;
+  largeLayoutShiftPercentage: number;
+  mediumLayoutShiftPercentage: number;
+  highSeverityAreaThreshold: number;
+  mediumSeverityAreaThreshold: number;
+  edgeAlignmentThreshold: number;
+}
+
 /**
  * Handles layout analysis of difference images for visual feedback
  */
-export class LayoutAnalyzer {
-  async analyzeLayout(diffImagePath: string): Promise<LayoutAnalysis> {
+export class LayoutAnalyzer implements IAnalyzer<LayoutAnalysis> {
+  readonly type = 'layout';
+
+  constructor(private readonly thresholds: LayoutAnalyzerThresholds) {}
+  async analyze(diffImagePath: string): Promise<LayoutAnalysis> {
     try {
       logger.debug('Starting layout analysis', { diffImagePath });
 
@@ -81,7 +94,7 @@ export class LayoutAnalyzer {
   ): DifferenceRegion[] {
     const regions: DifferenceRegion[] = [];
     const visited = new Set<string>();
-    const minRegionSize = 5; // Minimum size to consider significant
+    const minRegionSize = this.thresholds.minRegionSize;
 
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < info.width; x++) {
@@ -101,7 +114,11 @@ export class LayoutAnalyzer {
             // Determine severity based on size
             const area = region.width * region.height;
             const severity: 'low' | 'medium' | 'high' =
-              area > 5000 ? 'high' : area > 1000 ? 'medium' : 'low';
+              area > this.thresholds.highSeverityAreaThreshold
+                ? 'high'
+                : area > this.thresholds.mediumSeverityAreaThreshold
+                  ? 'medium'
+                  : 'low';
 
             regions.push({ ...region, severity });
           }
@@ -188,7 +205,7 @@ export class LayoutAnalyzer {
       const imageArea = imageInfo.width * imageInfo.height;
       const areaPercentage = (area / imageArea) * 100;
 
-      if (areaPercentage > 10) {
+      if (areaPercentage > this.thresholds.largeLayoutShiftPercentage) {
         // Large layout change
         layoutShifts.push({
           type: 'major_layout_shift',
@@ -196,7 +213,7 @@ export class LayoutAnalyzer {
           description: `Major layout shift detected (${Math.round(areaPercentage)}% of screen, ${region.width}x${region.height} pixels)`,
           region
         });
-      } else if (areaPercentage > 2) {
+      } else if (areaPercentage > this.thresholds.mediumLayoutShiftPercentage) {
         // Medium layout change
         layoutShifts.push({
           type: 'minor_layout_shift',
@@ -231,7 +248,7 @@ export class LayoutAnalyzer {
     region?: DifferenceRegion;
   }> {
     const alignmentIssues = [];
-    const edgeThreshold = 30; // Pixels from edge to consider alignment issue
+    const edgeThreshold = this.thresholds.edgeAlignmentThreshold;
 
     for (const region of regions) {
       // Check for alignment issues near edges
@@ -326,39 +343,77 @@ export class LayoutAnalyzer {
   }
 
   /**
+   * Detect issues from layout analysis
+   */
+  detectIssues(analysis: LayoutAnalysis): Issue[] {
+    const issues: Issue[] = [];
+
+    // Add layout shifts as issues
+    for (const shift of analysis.layoutShifts) {
+      issues.push({
+        type: 'layout',
+        severity: shift.severity,
+        description: shift.description,
+        location: shift.region
+      });
+    }
+
+    // Add alignment issues
+    for (const alignment of analysis.alignmentIssues) {
+      issues.push({
+        type: 'layout',
+        severity: 'medium',
+        description: alignment.description,
+        location: alignment.region
+      });
+    }
+
+    // Add spacing issues
+    for (const spacing of analysis.spacingIssues) {
+      issues.push({
+        type: 'spacing',
+        severity: 'low',
+        description: spacing.description,
+        location: spacing.region
+      });
+    }
+
+    return issues;
+  }
+
+  /**
    * Generate layout-specific suggestions
    */
-  generateLayoutSuggestions(analysis: LayoutAnalysis): Array<{
-    type: 'css' | 'general';
-    title: string;
-    description: string;
-    code?: string;
-    priority: number;
-  }> {
-    const suggestions = [];
+  generateSuggestions(issues: Issue[]): Suggestion[] {
+    const suggestions: Suggestion[] = [];
+    const layoutIssues = issues.filter(i => i.type === 'layout' || i.type === 'spacing');
+
+    // Group issues by type for better suggestions
+    const hasLayoutShifts = layoutIssues.some(i => i.description.includes('layout shift'));
+    const hasAlignmentIssues = layoutIssues.some(i => i.description.includes('alignment'));
+    const hasSpacingIssues = layoutIssues.some(i => i.type === 'spacing');
 
     // Layout shift suggestions
-    for (const shift of analysis.layoutShifts) {
+    if (hasLayoutShifts) {
+      const highSeverity = layoutIssues.some(i => i.severity === 'high');
       suggestions.push({
-        type: 'css' as const,
+        type: 'css',
         title: 'Fix Layout Positioning',
         description: 'Adjust element positioning to match the reference design',
         code: `/* Layout positioning fix */\n.target-element {\n  /* Review positioning properties */\n  position: /* check if relative/absolute/fixed is correct */;\n  top: /* adjust vertical position */;\n  left: /* adjust horizontal position */;\n  margin: /* check margin values */;\n  padding: /* check padding values */;\n}`,
-        priority: shift.severity === 'high' ? 1 : 2
+        priority: highSeverity ? 1 : 2
       });
 
-      if (shift.type === 'element_displacement') {
-        suggestions.push({
-          type: 'general' as const,
-          title: 'Element Displacement',
-          description: 'Check if elements have moved from their expected positions',
-          priority: 2
-        });
-      }
+      suggestions.push({
+        type: 'general',
+        title: 'Element Displacement',
+        description: 'Check if elements have moved from their expected positions',
+        priority: 2
+      });
     }
 
     // Alignment suggestions
-    if (analysis.alignmentIssues.length > 0) {
+    if (hasAlignmentIssues) {
       suggestions.push({
         type: 'general' as const,
         title: 'Layout Alignment',
@@ -376,7 +431,7 @@ export class LayoutAnalyzer {
     }
 
     // Spacing suggestions
-    if (analysis.spacingIssues.length > 0) {
+    if (hasSpacingIssues) {
       suggestions.push({
         type: 'css' as const,
         title: 'Spacing Adjustment',
