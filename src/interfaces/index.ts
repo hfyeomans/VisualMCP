@@ -7,6 +7,7 @@ import {
   FeedbackOptions,
   FeedbackResult,
   MonitoringSession,
+  MonitoringSummary,
   StartMonitoringParams
 } from '../types/index.js';
 
@@ -51,7 +52,7 @@ export interface IFeedbackAnalyzer {
  */
 export interface IMonitoringManager {
   startMonitoring(params: StartMonitoringParams): Promise<string>;
-  stopMonitoring(sessionId: string): Promise<any>;
+  stopMonitoring(sessionId: string): Promise<MonitoringSummary>;
   pauseMonitoring(sessionId: string): Promise<boolean>;
   resumeMonitoring(sessionId: string): Promise<boolean>;
   getActiveMonitoringSessions(): Promise<MonitoringSession[]>;
@@ -84,6 +85,13 @@ export interface IImageProcessor {
     height: number;
     format: string;
     size: number;
+  }>;
+  prepareImagesForComparison(
+    currentImagePath: string,
+    referenceImagePath: string
+  ): Promise<{
+    current: { path: string; isTemporary: boolean };
+    reference: { path: string; isTemporary: boolean };
   }>;
 }
 
@@ -133,7 +141,7 @@ export interface IMetricsCollector {
   incrementCounter(name: string, labels?: Record<string, string>): void;
   recordDuration(name: string, duration: number, labels?: Record<string, string>): void;
   recordValue(name: string, value: number, labels?: Record<string, string>): void;
-  getMetrics(): Promise<Record<string, any>>;
+  getMetrics(): Promise<Record<string, unknown>>;
 }
 
 /**

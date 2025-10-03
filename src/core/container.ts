@@ -7,9 +7,9 @@ const logger = createLogger('Container');
  * Simple dependency injection container
  */
 export class Container implements IDependencyContainer {
-  private factories = new Map<string | symbol, () => any>();
-  private singletons = new Map<string | symbol, any>();
-  private singletonFactories = new Map<string | symbol, () => any>();
+  private factories = new Map<string | symbol, () => unknown>();
+  private singletons = new Map<string | symbol, unknown>();
+  private singletonFactories = new Map<string | symbol, () => unknown>();
 
   register<T>(key: string | symbol, factory: () => T): void {
     logger.debug('Registering factory', { key: key.toString() });

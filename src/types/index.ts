@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 // Screenshot target types
+// Note: 'window' target type removed as it's not currently implemented
+// Desktop window capture requires platform-specific implementation
 export const ScreenshotTargetSchema = z.union([
   z.object({
     type: z.literal('url'),
@@ -11,11 +13,6 @@ export const ScreenshotTargetSchema = z.union([
         height: z.number().int().positive()
       })
       .optional()
-  }),
-  z.object({
-    type: z.literal('window'),
-    windowTitle: z.string(),
-    processName: z.string().optional()
   }),
   z.object({
     type: z.literal('region'),
@@ -229,9 +226,12 @@ export interface MonitoringStartResponse {
 
 export interface MonitoringSummary {
   sessionId: string;
+  startTime: string;
+  endTime: string;
   duration: string;
   totalScreenshots: number;
   significantChanges: number;
   averageDifference: number;
-  endTime: string;
+  screenshots: MonitoringScreenshot[];
+  target: ScreenshotTarget;
 }

@@ -292,12 +292,14 @@ export class ConfigManager {
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 const clone = <T>(value: T): T => {
-  const structuredCloneFn = (globalThis as any).structuredClone as (<U>(input: U) => U) | undefined;
+  // Check if structuredClone is available (Node 17+)
+  const structuredCloneFn = (globalThis as unknown as { structuredClone?: <U>(input: U) => U })
+    .structuredClone;
 
   if (typeof structuredCloneFn === 'function') {
     return structuredCloneFn(value);
@@ -306,10 +308,10 @@ const clone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
-function deepMerge<T extends Record<string, any>>(base: T, overrides: DeepPartial<T>): T {
-  const result: Record<string, any> = clone(base);
+function deepMerge<T extends Record<string, unknown>>(base: T, overrides: DeepPartial<T>): T {
+  const result: Record<string, unknown> = clone(base);
 
-  const mergeInto = (target: Record<string, any>, source: Record<string, any>) => {
+  const mergeInto = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
     for (const [key, value] of Object.entries(source)) {
       if (value === undefined) continue;
 

@@ -8,16 +8,13 @@ import {
   IImageProcessor
 } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
-import {
-  ScreenshotError,
-  ScreenshotTimeoutError,
-  ScreenshotNavigationError,
-  ScreenshotCaptureError
-} from '../core/errors.js';
+import { ScreenshotError, ScreenshotCaptureError } from '../core/errors.js';
 import { config } from '../core/config.js';
 import { createLogger } from '../core/logger.js';
 import { fileManager } from '../utils/file-utils.js';
 import { imageProcessor } from '../utils/image-utils.js';
+import { BrowserSession } from './browser-session.js';
+import { sanitizeFilename } from '../utils/sanitization.js';
 
 const logger = createLogger('ScreenshotEngine');
 
@@ -25,6 +22,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
   private outputDir: string;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private browserSession: BrowserSession;
 
   constructor(
     private browserManager: IBrowserManager,
@@ -32,6 +30,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
     private readonly imageHelper: IImageProcessor = imageProcessor
   ) {
     this.outputDir = config.outputDir;
+    this.browserSession = new BrowserSession();
     logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
   }
 
@@ -69,7 +68,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
       ...options
     };
 
-    const filename = mergedOptions.filename || `screenshot_${uuidv4()}.${mergedOptions.format}`;
+    // Generate and sanitize filename
+    const rawFilename = mergedOptions.filename || `screenshot_${uuidv4()}.${mergedOptions.format}`;
+    const filename = sanitizeFilename(rawFilename, {
+      allowedExtensions: ['png', 'jpeg', 'jpg'],
+      defaultExtension: mergedOptions.format
+    });
     const filepath = path.join(this.outputDir, filename);
 
     logger.info('Taking screenshot', {
@@ -88,7 +92,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
         default:
           throw new ScreenshotError(
-            `Unsupported target type: ${(target as any).type}`,
+            `Unsupported target type: ${(target as unknown as { type: string }).type}`,
             'UNSUPPORTED_TARGET_TYPE'
           );
       }
@@ -132,50 +136,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
       logger.debug('Navigating to URL', { url: target.url });
 
-      // Set viewport if specified
-      if (target.viewport) {
-        if (page) {
-          await page.setViewport({
-            width: target.viewport.width,
-            height: target.viewport.height,
-            deviceScaleFactor: 1
-          });
-        }
-
-        logger.debug('Viewport set', target.viewport);
-      }
-
-      // Navigate to URL with timeout handling
-      try {
-        if (page) {
-          await page.goto(target.url, {
-            waitUntil: options.waitForNetworkIdle ? 'networkidle0' : 'load',
-            timeout: options.timeout
-          });
-        }
-      } catch (error) {
-        if ((error as Error).message.includes('timeout')) {
-          throw new ScreenshotTimeoutError(target.url, options.timeout, error as Error);
-        }
-        throw new ScreenshotNavigationError(target.url, error as Error);
-      }
-
-      logger.debug('Page loaded, waiting for stability');
-
-      // Wait for any animations or dynamic content to complete
-      if (page) {
-        await page.evaluate(() => {
-          return new Promise<void>(resolve => {
-            /* eslint-disable no-undef */
-            if (document.readyState === 'complete') {
-              setTimeout(resolve, 500);
-            } else {
-              window.addEventListener('load', () => setTimeout(resolve, 500));
-            }
-            /* eslint-enable no-undef */
-          });
-        });
-      }
+      // Use BrowserSession to handle page lifecycle
+      await this.browserSession.setupPage(page, target.url, {
+        viewport: target.viewport,
+        timeout: options.timeout,
+        waitForNetworkIdle: options.waitForNetworkIdle
+      });
 
       // Take screenshot
       const screenshotOptions: {
@@ -285,7 +251,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
         });
       }
 
-      const screenshotOptions: any = {
+      const screenshotOptions: {
+        path: string;
+        type?: 'png' | 'jpeg';
+        clip?: { x: number; y: number; width: number; height: number };
+        quality?: number;
+      } = {
         path: filepath,
         type: options.format || options.defaultFormat,
         clip: {
