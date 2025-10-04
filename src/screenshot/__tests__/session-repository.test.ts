@@ -1,7 +1,9 @@
-import fs from 'fs-extra';
 import path from 'path';
-import { SessionRepository } from '../session-repository.js';
+
+import fs from 'fs-extra';
+
 import { MonitoringSession } from '../../types/index.js';
+import { SessionRepository } from '../session-repository.js';
 
 describe('SessionRepository', () => {
   const testDir = path.join(process.cwd(), 'test-sessions');

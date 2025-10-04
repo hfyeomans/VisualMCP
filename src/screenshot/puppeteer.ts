@@ -1,6 +1,11 @@
 import path from 'path';
+
 import { Page } from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
+
+import { config } from '../core/config.js';
+import { ScreenshotError, ScreenshotCaptureError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
 import {
   IScreenshotEngine,
   IBrowserManager,
@@ -8,13 +13,11 @@ import {
   IImageProcessor
 } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
-import { ScreenshotError, ScreenshotCaptureError } from '../core/errors.js';
-import { config } from '../core/config.js';
-import { createLogger } from '../core/logger.js';
 import { fileManager } from '../utils/file-utils.js';
 import { imageProcessor } from '../utils/image-utils.js';
-import { BrowserSession } from './browser-session.js';
 import { sanitizeFilename } from '../utils/sanitization.js';
+
+import { BrowserSession } from './browser-session.js';
 
 const logger = createLogger('ScreenshotEngine');
 

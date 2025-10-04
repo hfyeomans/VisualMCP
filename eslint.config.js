@@ -3,6 +3,7 @@ import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 import prettier from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
+import importPlugin from 'eslint-plugin-import';
 
 export default [
   js.configs.recommended,
@@ -28,7 +29,8 @@ export default [
     },
     plugins: {
       '@typescript-eslint': typescript,
-      prettier
+      prettier,
+      import: importPlugin
     },
     rules: {
       ...typescript.configs.recommended.rules,
@@ -44,10 +46,29 @@ export default [
           varsIgnorePattern: '^_'
         }
       ],
-      'no-console': 'warn',
+      'no-console': 'error',
       'prefer-const': 'error',
       'no-var': 'error',
-      'eqeqeq': ['error', 'always', { null: 'ignore' }]
+      'eqeqeq': ['error', 'always', { null: 'ignore' }],
+      'import/order': [
+        'error',
+        {
+          'groups': [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index'
+          ],
+          'newlines-between': 'always',
+          'alphabetize': {
+            'order': 'asc',
+            'caseInsensitive': true
+          }
+        }
+      ],
+      'import/no-duplicates': 'error'
     }
   },
   {
@@ -72,8 +93,19 @@ export default [
         afterEach: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
-        jest: 'readonly'
+        jest: 'readonly',
+        fail: 'readonly'
       }
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ]
     }
   },
   {

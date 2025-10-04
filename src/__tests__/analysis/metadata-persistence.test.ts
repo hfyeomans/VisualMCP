@@ -1,5 +1,7 @@
-import fs from 'fs-extra';
 import path from 'path';
+
+import fs from 'fs-extra';
+
 import { MetadataPersistenceService } from '../../analysis/metadata-persistence.js';
 import { FeedbackResult } from '../../types/index.js';
 

@@ -6,21 +6,11 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 
 // Core imports
 import { config } from './core/config.js';
-import { createLogger } from './core/logger.js';
 import { container } from './core/container.js';
-import { cleanupManager } from './core/resource-manager.js';
 import { isVisualMCPError, ValidationError } from './core/errors.js';
 import { registerCoreServices, initializeCoreServices } from './core/factories.js';
-
-// Interface imports
-import {
-  SERVICE_TOKENS,
-  IScreenshotEngine,
-  IComparisonEngine,
-  IFeedbackAnalyzer,
-  IMonitoringManager
-} from './interfaces/index.js';
-
+import { createLogger } from './core/logger.js';
+import { cleanupManager } from './core/resource-manager.js';
 // Handler imports
 import {
   createTakeScreenshotHandler,
@@ -29,6 +19,13 @@ import {
   createStartMonitoringHandler,
   createStopMonitoringHandler
 } from './handlers/index.js';
+import {
+  SERVICE_TOKENS,
+  IScreenshotEngine,
+  IComparisonEngine,
+  IFeedbackAnalyzer,
+  IMonitoringManager
+} from './interfaces/index.js';
 
 const logger = createLogger('MCPServer');
 

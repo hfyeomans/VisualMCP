@@ -5,6 +5,67 @@ All notable changes to the Visual MCP project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- E2E test harness using @modelcontextprotocol/sdk for comprehensive server testing
+- ESLint import ordering rules with automatic alphabetization
+- GitHub Actions CI pipeline with lint, typecheck, unit, e2e, and build stages
+- Release process documentation in `docs/RELEASE_CHECKLIST.md`
+- Pluggable analyzer registry with strategy pattern for feedback generation
+- JSON metadata persistence alongside diff images for reproducibility
+- AsyncScheduler with jitter and exponential backoff for monitoring
+- SessionRepository for persistent monitoring sessions (filesystem-based)
+- AutoFeedbackManager with rate limiting for automated analysis
+- Browser session management utilities for reusable page setup
+- Filename sanitization for safe screenshot paths
+- Deep merge support for configuration environment overrides
+- Graceful shutdown hooks with comprehensive cleanup lifecycle
+- Factory functions for all service initialization
+- Component-specific loggers with structured metadata
+
+### Changed
+- **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
+- `no-console` ESLint rule changed from 'warn' to 'error' (intentional console usage requires eslint-disable)
+- All services now use constructor-based dependency injection
+- Configuration manager supports deep merging without overwriting unrelated fields
+- Async initialization separated from construction via explicit `init()` methods
+- Screenshot/comparison engines use reusable browser session helpers
+- Image manipulation utilities merged to reduce code duplication
+- Monitoring uses queued async scheduler instead of raw setInterval
+- Import statements now automatically sorted by ESLint
+- FeedbackGenerator refactored into composable analyzers
+- Issue generation logic centralized to avoid duplication
+
+### Fixed
+- **CRITICAL**: Persisted monitoring sessions now properly resume after server restart - schedulers are automatically recreated for active sessions
+- Monitoring scheduler config values (jitterMs, backoffMultiplier, maxBackoffMs) now respected instead of hardcoded defaults
+- Cleanup manager properly disposes monitoring intervals on shutdown
+- Configuration updates no longer overwrite nested unrelated fields
+- No more overlapping monitoring executions via AsyncScheduler queuing
+- Directory creation properly awaited in engine initialization
+
+### Removed
+- Unsupported `window` target type from screenshot schema (not yet implemented)
+- dist/ directory from version control (generated during build/publish only)
+
+### Developer Experience
+- Comprehensive E2E tests covering all MCP tools and error handling
+- Lint-enforced import ordering for consistent code style
+- CI pipeline ensures code quality before merge
+- Release checklist provides step-by-step publish guidance
+- Monitoring sessions persist across process restarts
+
+### Technical Details
+- Test coverage improved across all refactored modules
+- All async initialization properly awaited
+- Correlation IDs included in handler logs for request tracing
+- Severity classification uses configurable thresholds
+- Monitoring includes pause/resume capabilities
+
+### Migration Notes
+No breaking changes at the MCP tool interface level - all changes are internal refactoring. Existing tool invocations remain compatible.
+
 ## [1.0.0] - 2025-01-09
 
 ### Added

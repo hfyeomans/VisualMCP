@@ -1,4 +1,5 @@
 import { IDependencyContainer } from '../interfaces/index.js';
+
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Container');

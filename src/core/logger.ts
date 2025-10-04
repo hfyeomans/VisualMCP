@@ -1,5 +1,7 @@
-import fs from 'fs-extra';
 import path from 'path';
+
+import fs from 'fs-extra';
+
 import { config } from './config.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

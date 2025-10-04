@@ -1,10 +1,12 @@
-import fs from 'fs-extra';
 import path from 'path';
-import sharp from 'sharp';
+
+import fs from 'fs-extra';
 import { PNG } from 'pngjs';
-import { IImageProcessor } from '../interfaces/index.js';
+import sharp from 'sharp';
+
 import { ImageLoadError, ImageFormatError, FileWriteError, FileReadError } from '../core/errors.js';
 import { createLogger } from '../core/logger.js';
+import { IImageProcessor } from '../interfaces/index.js';
 
 const logger = createLogger('ImageUtils');
 

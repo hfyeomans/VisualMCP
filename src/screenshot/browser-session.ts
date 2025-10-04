@@ -1,6 +1,7 @@
 import { Page } from 'puppeteer';
-import { createLogger } from '../core/logger.js';
+
 import { ScreenshotTimeoutError, ScreenshotNavigationError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
 
 const logger = createLogger('BrowserSession');
 

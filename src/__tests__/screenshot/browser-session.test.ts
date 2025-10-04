@@ -1,6 +1,7 @@
 import { Page } from 'puppeteer';
-import { BrowserSession } from '../../screenshot/browser-session.js';
+
 import { ScreenshotTimeoutError, ScreenshotNavigationError } from '../../core/errors.js';
+import { BrowserSession } from '../../screenshot/browser-session.js';
 
 // Mock Puppeteer Page
 interface MockPage {

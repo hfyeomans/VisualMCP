@@ -1,8 +1,9 @@
+import { DiffImageNotFoundError, AnalysisError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
 import { IFeedbackAnalyzer } from '../interfaces/index.js';
 import { FeedbackOptions, FeedbackResult, Issue, Suggestion } from '../types/index.js';
-import { createLogger } from '../core/logger.js';
-import { DiffImageNotFoundError, AnalysisError } from '../core/errors.js';
 import { fileManager } from '../utils/file-utils.js';
+
 import { AnalyzerRegistry } from './analyzer-interface.js';
 import { MetadataPersistenceService } from './metadata-persistence.js';
 

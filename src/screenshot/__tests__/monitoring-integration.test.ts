@@ -1,8 +1,10 @@
-import fs from 'fs-extra';
 import path from 'path';
-import { MonitoringManager } from '../monitoring.js';
+
+import fs from 'fs-extra';
+
 import { IScreenshotEngine, IComparisonEngine, IFeedbackAnalyzer } from '../../interfaces/index.js';
 import { ScreenshotResult, ComparisonResult, FeedbackResult } from '../../types/index.js';
+import { MonitoringManager } from '../monitoring.js';
 
 describe('MonitoringManager Integration', () => {
   let mockScreenshotEngine: jest.Mocked<IScreenshotEngine>;
@@ -237,7 +239,7 @@ describe('MonitoringManager Integration', () => {
     expect(await fs.pathExists(sessionFile)).toBe(true);
 
     // Verify initial persist
-    let sessionData = await fs.readJson(sessionFile);
+    const sessionData = await fs.readJson(sessionFile);
     expect(sessionData.id).toBe(sessionId);
 
     await manager.stopMonitoring(sessionId);
@@ -296,6 +298,80 @@ describe('MonitoringManager Integration', () => {
     expect(loadedSession?.id).toBe(sessionId);
 
     await manager1.cleanup();
+    await manager2.cleanup();
+  });
+
+  it('should resume active monitoring sessions after restart', async () => {
+    // Create first manager and start monitoring
+    const manager1 = new MonitoringManager(
+      mockScreenshotEngine,
+      mockComparisonEngine,
+      mockFeedbackAnalyzer,
+      {
+        persistSessions: true,
+        sessionsDirectory: testSessionsDir,
+        autoFeedbackRateLimitMs: 1000,
+        maxConcurrentFeedback: 2,
+        schedulerJitterMs: 0,
+        schedulerBackoffMultiplier: 1,
+        schedulerMaxBackoffMs: 5000
+      }
+    );
+
+    await manager1.init();
+
+    const sessionId = await manager1.startMonitoring({
+      target: { type: 'url', url: 'https://example.com' },
+      interval: 0.5, // 500ms for faster test
+      referenceImage: testRefImage,
+      autoFeedback: false
+    });
+
+    // Wait for initial capture
+    await Promise.resolve();
+
+    // Simulate process crash by NOT calling cleanup (which would stop sessions)
+    // Just drop reference to manager1, keeping persisted sessions active
+    // In real scenario, this is like process.exit() or crash
+
+    // Reset mock to track new captures after restart
+    mockScreenshotEngine.takeScreenshot.mockClear();
+
+    // Simulate restart: create new manager instance
+    const manager2 = new MonitoringManager(
+      mockScreenshotEngine,
+      mockComparisonEngine,
+      mockFeedbackAnalyzer,
+      {
+        persistSessions: true,
+        sessionsDirectory: testSessionsDir,
+        autoFeedbackRateLimitMs: 1000,
+        maxConcurrentFeedback: 2,
+        schedulerJitterMs: 0,
+        schedulerBackoffMultiplier: 1,
+        schedulerMaxBackoffMs: 5000
+      }
+    );
+
+    await manager2.init();
+
+    // Session should be loaded with isActive: true
+    const loadedSession = await manager2.getMonitoringSession(sessionId);
+    expect(loadedSession).not.toBeNull();
+    expect(loadedSession?.isActive).toBe(true);
+
+    // Verify scheduler was recreated (by checking resumeMonitoring works)
+    const resumed = await manager2.resumeMonitoring(sessionId);
+    expect(resumed).toBe(true);
+
+    // Advance time to trigger scheduler (interval is 500ms)
+    jest.advanceTimersByTime(600);
+    await Promise.resolve();
+
+    // Should have captured new screenshot(s) after restart
+    expect(mockScreenshotEngine.takeScreenshot).toHaveBeenCalled();
+
+    // Cleanup properly
     await manager2.cleanup();
   });
 
@@ -389,7 +465,7 @@ describe('MonitoringManager Integration', () => {
         referenceImage: testRefImage,
         autoFeedback: false
       });
-    } catch (e) {
+    } catch (_e) {
       // Initial capture failed as expected
       // The scheduler will still be created and will retry
     }

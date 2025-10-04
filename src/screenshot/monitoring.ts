@@ -1,18 +1,21 @@
 import { EventEmitter } from 'events';
-import { v4 as uuidv4 } from 'uuid';
+
 import fs from 'fs-extra';
+import { v4 as uuidv4 } from 'uuid';
+
+import { ReferenceImageNotFoundError, SessionNotFoundError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
+import { IScreenshotEngine, IComparisonEngine, IFeedbackAnalyzer } from '../interfaces/index.js';
 import {
   MonitoringSession,
   MonitoringScreenshot,
   MonitoringSummary,
   StartMonitoringParams
 } from '../types/index.js';
-import { IScreenshotEngine, IComparisonEngine, IFeedbackAnalyzer } from '../interfaces/index.js';
-import { createLogger } from '../core/logger.js';
-import { ReferenceImageNotFoundError, SessionNotFoundError } from '../core/errors.js';
+
 import { AsyncScheduler } from './async-scheduler.js';
-import { SessionRepository } from './session-repository.js';
 import { AutoFeedbackManager } from './auto-feedback-manager.js';
+import { SessionRepository } from './session-repository.js';
 
 const logger = createLogger('MonitoringManager');
 
@@ -33,6 +36,7 @@ export class MonitoringManager extends EventEmitter {
   private comparisonEngine: IComparisonEngine;
   private sessionRepository?: SessionRepository;
   private autoFeedbackManager?: AutoFeedbackManager;
+  private options: MonitoringManagerOptions;
 
   constructor(
     screenshotEngine: IScreenshotEngine,
@@ -44,7 +48,7 @@ export class MonitoringManager extends EventEmitter {
     this.screenshotEngine = screenshotEngine;
     this.comparisonEngine = comparisonEngine;
 
-    const opts: MonitoringManagerOptions = {
+    this.options = {
       persistSessions: options?.persistSessions ?? true,
       sessionsDirectory: options?.sessionsDirectory ?? 'comparisons',
       autoFeedbackRateLimitMs: options?.autoFeedbackRateLimitMs ?? 60000,
@@ -55,16 +59,16 @@ export class MonitoringManager extends EventEmitter {
     };
 
     // Initialize session repository if persistence enabled
-    if (opts.persistSessions) {
-      this.sessionRepository = new SessionRepository(opts.sessionsDirectory);
+    if (this.options.persistSessions) {
+      this.sessionRepository = new SessionRepository(this.options.sessionsDirectory);
     }
 
     // Initialize auto-feedback manager if feedback analyzer provided
     if (feedbackAnalyzer) {
       this.autoFeedbackManager = new AutoFeedbackManager(feedbackAnalyzer, {
         enabled: true,
-        rateLimitMs: opts.autoFeedbackRateLimitMs,
-        maxConcurrent: opts.maxConcurrentFeedback
+        rateLimitMs: this.options.autoFeedbackRateLimitMs,
+        maxConcurrent: this.options.maxConcurrentFeedback
       });
     }
   }
@@ -82,8 +86,28 @@ export class MonitoringManager extends EventEmitter {
         this.sessions.set(session.id, session);
         logger.info('Loaded persisted session', {
           sessionId: session.id,
-          screenshotsCount: session.screenshots.length
+          screenshotsCount: session.screenshots.length,
+          isActive: session.isActive
         });
+
+        // Recreate and restart schedulers for active sessions
+        if (session.isActive) {
+          const intervalMs = session.interval * 1000;
+          const scheduler = new AsyncScheduler(() => this.captureMonitoringScreenshot(session.id), {
+            intervalMs,
+            maxJitter: this.options.schedulerJitterMs,
+            backoffMultiplier: this.options.schedulerBackoffMultiplier,
+            maxBackoffMs: this.options.schedulerMaxBackoffMs
+          });
+
+          this.schedulers.set(session.id, scheduler);
+          scheduler.start();
+
+          logger.info('Resumed monitoring session', {
+            sessionId: session.id,
+            intervalSeconds: session.interval
+          });
+        }
       }
     }
   }
@@ -121,9 +145,9 @@ export class MonitoringManager extends EventEmitter {
     const intervalMs = (params.interval || 5) * 1000;
     const scheduler = new AsyncScheduler(() => this.captureMonitoringScreenshot(sessionId), {
       intervalMs,
-      maxJitter: 1000, // Add up to 1s jitter
-      backoffMultiplier: 1.5,
-      maxBackoffMs: 60000
+      maxJitter: this.options.schedulerJitterMs,
+      backoffMultiplier: this.options.schedulerBackoffMultiplier,
+      maxBackoffMs: this.options.schedulerMaxBackoffMs
     });
 
     this.schedulers.set(sessionId, scheduler);
@@ -376,4 +400,3 @@ export class MonitoringManager extends EventEmitter {
     }
   }
 }
-

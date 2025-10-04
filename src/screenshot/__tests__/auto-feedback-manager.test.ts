@@ -1,6 +1,6 @@
-import { AutoFeedbackManager } from '../auto-feedback-manager.js';
 import { IFeedbackAnalyzer } from '../../interfaces/index.js';
 import { FeedbackResult } from '../../types/index.js';
+import { AutoFeedbackManager } from '../auto-feedback-manager.js';
 
 describe('AutoFeedbackManager', () => {
   let mockAnalyzer: jest.Mocked<IFeedbackAnalyzer>;
@@ -33,7 +33,7 @@ describe('AutoFeedbackManager', () => {
     const sessionId = 'session-1';
 
     // First trigger should succeed
-    let result1 = await manager.triggerFeedback(sessionId, '/diff1.png');
+    const result1 = await manager.triggerFeedback(sessionId, '/diff1.png');
     await jest.runAllTimersAsync();
     expect(result1).toBe(true);
     expect(mockAnalyzer.analyzeDifferences).toHaveBeenCalledTimes(1);
@@ -103,8 +103,20 @@ describe('AutoFeedbackManager', () => {
     expect(result3).toBe(false); // Queued because limit reached
 
     // Resolve the analyses
-    resolveAnalysis1!({ summary: 'Test', issues: [], suggestions: [], priority: 'layout', confidence: 85 });
-    resolveAnalysis2!({ summary: 'Test', issues: [], suggestions: [], priority: 'layout', confidence: 85 });
+    resolveAnalysis1!({
+      summary: 'Test',
+      issues: [],
+      suggestions: [],
+      priority: 'layout',
+      confidence: 85
+    });
+    resolveAnalysis2!({
+      summary: 'Test',
+      issues: [],
+      suggestions: [],
+      priority: 'layout',
+      confidence: 85
+    });
 
     await trigger1;
     await trigger2;

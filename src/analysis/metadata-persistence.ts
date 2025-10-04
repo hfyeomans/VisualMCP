@@ -1,8 +1,10 @@
-import fs from 'fs-extra';
 import path from 'path';
-import { FeedbackResult } from '../types/index.js';
-import { createLogger } from '../core/logger.js';
+
+import fs from 'fs-extra';
+
 import { FileWriteError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
+import { FeedbackResult } from '../types/index.js';
 
 const logger = createLogger('MetadataPersistence');
 
