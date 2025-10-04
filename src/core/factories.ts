@@ -1,7 +1,9 @@
-import { container } from './container.js';
-import { browserManager } from './browser-manager.js';
-import { cleanupManager } from './resource-manager.js';
-import { config } from './config.js';
+import { AnalyzerRegistry } from '../analysis/analyzer-interface.js';
+import { ColorAnalyzer } from '../analysis/color-analyzer.js';
+import { FeedbackGenerator } from '../analysis/feedback-generator.js';
+import { LayoutAnalyzer } from '../analysis/layout-analyzer.js';
+import { MetadataPersistenceService } from '../analysis/metadata-persistence.js';
+import { ComparisonEngine } from '../comparison/differ.js';
 import {
   SERVICE_TOKENS,
   IScreenshotEngine,
@@ -11,16 +13,15 @@ import {
   IFileManager,
   IImageProcessor
 } from '../interfaces/index.js';
-import { ScreenshotEngine } from '../screenshot/puppeteer.js';
-import { ComparisonEngine } from '../comparison/differ.js';
-import { FeedbackGenerator } from '../analysis/feedback-generator.js';
-import { ColorAnalyzer } from '../analysis/color-analyzer.js';
-import { LayoutAnalyzer } from '../analysis/layout-analyzer.js';
-import { AnalyzerRegistry } from '../analysis/analyzer-interface.js';
-import { MetadataPersistenceService } from '../analysis/metadata-persistence.js';
 import { MonitoringManager } from '../screenshot/monitoring.js';
+import { ScreenshotEngine } from '../screenshot/puppeteer.js';
 import { fileManager } from '../utils/file-utils.js';
 import { imageProcessor } from '../utils/image-utils.js';
+
+import { browserManager } from './browser-manager.js';
+import { config } from './config.js';
+import { container } from './container.js';
+import { cleanupManager } from './resource-manager.js';
 
 let servicesRegistered = false;
 let servicesInitialized = false;

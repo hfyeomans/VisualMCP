@@ -49,17 +49,15 @@ describe('AsyncScheduler', () => {
 
   it('should verify no overlapping runs across 100 iterations', async () => {
     const runLog: Array<{ start: number; end: number }> = [];
-    let currentRun = 0;
+    let _currentRun = 0;
 
     const task = async () => {
-      currentRun++;
+      _currentRun++;
       const start = Date.now();
       runLog.push({ start, end: 0 });
 
       // Simulate work taking 10-50ms
-      await new Promise(resolve =>
-        setTimeout(resolve, Math.floor(Math.random() * 40) + 10)
-      );
+      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 40) + 10));
 
       const index = runLog.findIndex(r => r.start === start);
       if (index >= 0 && runLog[index]) {
@@ -162,10 +160,7 @@ describe('AsyncScheduler', () => {
     const first = executionTimes[0] ?? 0;
     const second = executionTimes[1] ?? 0;
     const third = executionTimes[2] ?? 0;
-    const intervals = [
-      second - first,
-      third - second
-    ];
+    const intervals = [second - first, third - second];
 
     expect(intervals[0]).toBeGreaterThanOrEqual(1000);
     expect(intervals[1]).toBeGreaterThanOrEqual(2000);

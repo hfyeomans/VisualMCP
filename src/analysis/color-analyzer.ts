@@ -1,8 +1,10 @@
 import sharp from 'sharp';
-import { createLogger } from '../core/logger.js';
-import { ImageUtils } from '../utils/image-utils.js';
+
 import { AnalysisError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
 import { Issue, Suggestion } from '../types/index.js';
+import { ImageUtils } from '../utils/image-utils.js';
+
 import { IAnalyzer } from './analyzer-interface.js';
 
 const logger = createLogger('ColorAnalyzer');

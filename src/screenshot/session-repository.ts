@@ -1,7 +1,9 @@
-import fs from 'fs-extra';
 import path from 'path';
-import { MonitoringSession } from '../types/index.js';
+
+import fs from 'fs-extra';
+
 import { createLogger } from '../core/logger.js';
+import { MonitoringSession } from '../types/index.js';
 
 const logger = createLogger('SessionRepository');
 

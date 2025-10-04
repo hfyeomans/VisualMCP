@@ -1,7 +1,9 @@
 import sharp from 'sharp';
-import { createLogger } from '../core/logger.js';
+
 import { AnalysisError } from '../core/errors.js';
+import { createLogger } from '../core/logger.js';
 import { DifferenceRegion, Issue, Suggestion } from '../types/index.js';
+
 import { IAnalyzer } from './analyzer-interface.js';
 
 const logger = createLogger('LayoutAnalyzer');

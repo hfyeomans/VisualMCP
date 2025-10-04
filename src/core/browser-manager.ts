@@ -1,8 +1,11 @@
 import { EventEmitter } from 'events';
+
 import puppeteer, { Browser, Page, PuppeteerLaunchOptions } from 'puppeteer';
+
 import { IBrowserManager, ICleanupManager } from '../interfaces/index.js';
-import { BrowserLaunchError } from './errors.js';
+
 import { config } from './config.js';
+import { BrowserLaunchError } from './errors.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('BrowserManager');

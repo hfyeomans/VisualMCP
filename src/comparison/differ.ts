@@ -1,16 +1,18 @@
-import fs from 'fs-extra';
 import path from 'path';
-import { PNG } from 'pngjs';
+
+import fs from 'fs-extra';
 import pixelmatch from 'pixelmatch';
+import { PNG } from 'pngjs';
 import sharp from 'sharp';
+
+import { createLogger } from '../core/logger.js';
+import { IImageProcessor } from '../interfaces/index.js';
 import {
   ComparisonOptions,
   ComparisonResult,
   DifferenceRegion,
   ImageMetadata
 } from '../types/index.js';
-import { createLogger } from '../core/logger.js';
-import { IImageProcessor } from '../interfaces/index.js';
 import { imageProcessor } from '../utils/image-utils.js';
 
 const logger = createLogger('ComparisonEngine');

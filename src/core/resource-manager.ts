@@ -1,7 +1,9 @@
 import { EventEmitter } from 'events';
+
 import { ICleanupManager } from '../interfaces/index.js';
-import { createLogger } from './logger.js';
+
 import { browserManager } from './browser-manager.js';
+import { createLogger } from './logger.js';
 
 const logger = createLogger('ResourceManager');
 
