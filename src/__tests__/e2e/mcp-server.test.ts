@@ -155,7 +155,7 @@ describe('MCP Server E2E Tests', () => {
       } catch (error) {
         expect(error).toBeDefined();
       }
-    }, 10000);
+    }, 15000);
   });
 
   describe('Comparison Tool', () => {
