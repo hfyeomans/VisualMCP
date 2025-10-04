@@ -47,6 +47,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       // Run all analyzers
       const allIssues: Issue[] = [];
       const allSuggestions: Suggestion[] = [];
+      let successfulAnalyzers = 0;
 
       for (const analyzer of analyzers) {
         try {
@@ -62,6 +63,8 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
           // Generate suggestions
           const suggestions = analyzer.generateSuggestions(issues);
           allSuggestions.push(...suggestions);
+
+          successfulAnalyzers++;
 
           logger.debug('Analyzer completed', {
             type: analyzer.type,
@@ -88,7 +91,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
       uniqueSuggestions.sort((a, b) => a.priority - b.priority);
 
       // Calculate confidence
-      const confidence = this.calculateConfidence(allIssues, analyzers.length);
+      const confidence = this.calculateConfidence(allIssues, successfulAnalyzers);
 
       // Generate summary
       const summary = this.generateSummary(allIssues, uniqueSuggestions, context);
@@ -144,7 +147,7 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
     });
   }
 
-  private calculateConfidence(issues: Issue[], analyzersCount: number): number {
+  private calculateConfidence(issues: Issue[], successfulAnalyzers: number): number {
     let confidence = 100;
 
     // Reduce confidence based on number of issues
@@ -168,15 +171,15 @@ export class FeedbackGenerator implements IFeedbackAnalyzer {
 
     confidence -= severityPenalty;
 
-    // Reduce confidence if no analyzers ran
-    if (analyzersCount === 0) {
+    // Reduce confidence if no analyzers succeeded
+    if (successfulAnalyzers === 0) {
       confidence -= 30;
-    } else if (analyzersCount === 1) {
+    } else if (successfulAnalyzers === 1) {
       confidence -= 10;
     }
 
-    // Boost confidence if we have multiple analyzers
-    if (analyzersCount >= 2) {
+    // Boost confidence if we have multiple successful analyzers
+    if (successfulAnalyzers >= 2) {
       confidence += 5;
     }
 
