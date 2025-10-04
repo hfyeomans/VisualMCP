@@ -66,9 +66,20 @@ export function registerCoreServices(): void {
   });
 
   container.registerSingleton<IMonitoringManager>(SERVICE_TOKENS.MONITORING_MANAGER, () => {
+    const cfg = config.getConfig();
     const screenshotEngine = container.resolve<IScreenshotEngine>(SERVICE_TOKENS.SCREENSHOT_ENGINE);
     const comparisonEngine = container.resolve<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE);
-    return new MonitoringManager(screenshotEngine, comparisonEngine);
+    const feedbackAnalyzer = container.resolve<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER);
+
+    return new MonitoringManager(screenshotEngine, comparisonEngine, feedbackAnalyzer, {
+      persistSessions: cfg.monitoring.persistSessions,
+      sessionsDirectory: cfg.monitoring.sessionsDirectory,
+      autoFeedbackRateLimitMs: cfg.monitoring.autoFeedbackRateLimitMs,
+      maxConcurrentFeedback: cfg.monitoring.maxConcurrentFeedback,
+      schedulerJitterMs: cfg.monitoring.schedulerJitterMs,
+      schedulerBackoffMultiplier: cfg.monitoring.schedulerBackoffMultiplier,
+      schedulerMaxBackoffMs: cfg.monitoring.schedulerMaxBackoffMs
+    });
   });
 
   servicesRegistered = true;
@@ -97,6 +108,12 @@ export async function initializeCoreServices(): Promise<void> {
   const monitoringManager = container.resolve<IMonitoringManager>(
     SERVICE_TOKENS.MONITORING_MANAGER
   );
+
+  // Initialize monitoring manager (load persisted sessions)
+  if ('init' in monitoringManager) {
+    const manager = monitoringManager as { init: () => Promise<void> };
+    await manager.init();
+  }
 
   cleanupManager.removeCleanupHandler('MonitoringManager');
   cleanupManager.registerCleanupHandler('MonitoringManager', async () => {

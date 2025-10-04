@@ -7,23 +7,85 @@ import {
   MonitoringSummary,
   StartMonitoringParams
 } from '../types/index.js';
-import { IScreenshotEngine, IComparisonEngine } from '../interfaces/index.js';
+import { IScreenshotEngine, IComparisonEngine, IFeedbackAnalyzer } from '../interfaces/index.js';
 import { createLogger } from '../core/logger.js';
 import { ReferenceImageNotFoundError, SessionNotFoundError } from '../core/errors.js';
+import { AsyncScheduler } from './async-scheduler.js';
+import { SessionRepository } from './session-repository.js';
+import { AutoFeedbackManager } from './auto-feedback-manager.js';
 
 const logger = createLogger('MonitoringManager');
 
+export interface MonitoringManagerOptions {
+  persistSessions: boolean;
+  sessionsDirectory: string;
+  autoFeedbackRateLimitMs: number;
+  maxConcurrentFeedback: number;
+  schedulerJitterMs: number;
+  schedulerBackoffMultiplier: number;
+  schedulerMaxBackoffMs: number;
+}
+
 export class MonitoringManager extends EventEmitter {
   private sessions: Map<string, MonitoringSession> = new Map();
-  private intervals: Map<string, NodeJS.Timeout> = new Map();
-  private activeCaptures = new Set<string>();
+  private schedulers: Map<string, AsyncScheduler> = new Map();
   private screenshotEngine: IScreenshotEngine;
   private comparisonEngine: IComparisonEngine;
+  private sessionRepository?: SessionRepository;
+  private autoFeedbackManager?: AutoFeedbackManager;
 
-  constructor(screenshotEngine: IScreenshotEngine, comparisonEngine: IComparisonEngine) {
+  constructor(
+    screenshotEngine: IScreenshotEngine,
+    comparisonEngine: IComparisonEngine,
+    feedbackAnalyzer?: IFeedbackAnalyzer,
+    options?: Partial<MonitoringManagerOptions>
+  ) {
     super();
     this.screenshotEngine = screenshotEngine;
     this.comparisonEngine = comparisonEngine;
+
+    const opts: MonitoringManagerOptions = {
+      persistSessions: options?.persistSessions ?? true,
+      sessionsDirectory: options?.sessionsDirectory ?? 'comparisons',
+      autoFeedbackRateLimitMs: options?.autoFeedbackRateLimitMs ?? 60000,
+      maxConcurrentFeedback: options?.maxConcurrentFeedback ?? 2,
+      schedulerJitterMs: options?.schedulerJitterMs ?? 1000,
+      schedulerBackoffMultiplier: options?.schedulerBackoffMultiplier ?? 1.5,
+      schedulerMaxBackoffMs: options?.schedulerMaxBackoffMs ?? 60000
+    };
+
+    // Initialize session repository if persistence enabled
+    if (opts.persistSessions) {
+      this.sessionRepository = new SessionRepository(opts.sessionsDirectory);
+    }
+
+    // Initialize auto-feedback manager if feedback analyzer provided
+    if (feedbackAnalyzer) {
+      this.autoFeedbackManager = new AutoFeedbackManager(feedbackAnalyzer, {
+        enabled: true,
+        rateLimitMs: opts.autoFeedbackRateLimitMs,
+        maxConcurrent: opts.maxConcurrentFeedback
+      });
+    }
+  }
+
+  /**
+   * Initialize monitoring manager (load persisted sessions)
+   */
+  async init(): Promise<void> {
+    if (this.sessionRepository) {
+      await this.sessionRepository.init();
+
+      // Load persisted sessions
+      const sessions = await this.sessionRepository.loadAllSessions();
+      for (const session of sessions) {
+        this.sessions.set(session.id, session);
+        logger.info('Loaded persisted session', {
+          sessionId: session.id,
+          screenshotsCount: session.screenshots.length
+        });
+      }
+    }
   }
 
   async startMonitoring(params: StartMonitoringParams): Promise<string> {
@@ -50,19 +112,27 @@ export class MonitoringManager extends EventEmitter {
 
     this.sessions.set(sessionId, session);
 
-    // Start monitoring interval
+    // Persist session if enabled
+    if (this.sessionRepository) {
+      await this.sessionRepository.saveSession(session);
+    }
+
+    // Create async scheduler instead of setInterval
     const intervalMs = (params.interval || 5) * 1000;
-    const intervalId = setInterval(() => {
-      void this.captureMonitoringScreenshot(sessionId).catch(error => {
-        logger.error('Error during monitoring interval', error as Error, { sessionId });
-        this.emit('monitoring_error', { sessionId, error });
-      });
-    }, intervalMs);
+    const scheduler = new AsyncScheduler(() => this.captureMonitoringScreenshot(sessionId), {
+      intervalMs,
+      maxJitter: 1000, // Add up to 1s jitter
+      backoffMultiplier: 1.5,
+      maxBackoffMs: 60000
+    });
 
-    this.intervals.set(sessionId, intervalId);
+    this.schedulers.set(sessionId, scheduler);
 
-    // Take initial screenshot immediately
+    // Take initial screenshot immediately before starting scheduler
     await this.captureMonitoringScreenshot(sessionId);
+
+    // Start the scheduler
+    scheduler.start();
 
     logger.info('Monitoring session started', {
       sessionId,
@@ -81,7 +151,12 @@ export class MonitoringManager extends EventEmitter {
       throw new SessionNotFoundError(sessionId);
     }
 
-    this.clearInterval(sessionId);
+    // Stop scheduler
+    const scheduler = this.schedulers.get(sessionId);
+    if (scheduler) {
+      scheduler.stop();
+      this.schedulers.delete(sessionId);
+    }
 
     // Mark session as inactive
     session.isActive = false;
@@ -100,8 +175,18 @@ export class MonitoringManager extends EventEmitter {
       target: session.target
     };
 
-    // Remove session
+    // Persist final session state before removal
+    if (this.sessionRepository) {
+      await this.sessionRepository.saveSession(session);
+    }
+
+    // Remove session from memory
     this.sessions.delete(sessionId);
+
+    // Delete session file (session is complete)
+    if (this.sessionRepository) {
+      await this.sessionRepository.deleteSession(sessionId);
+    }
 
     logger.info('Monitoring session stopped', {
       sessionId,
@@ -120,13 +205,7 @@ export class MonitoringManager extends EventEmitter {
       return;
     }
 
-    if (this.activeCaptures.has(sessionId)) {
-      logger.debug('Skipping capture while previous run is in progress', { sessionId });
-      return;
-    }
-
-    this.activeCaptures.add(sessionId);
-
+    // AsyncScheduler already prevents overlapping runs, so no need for activeCaptures
     try {
       // Take screenshot
       const result = await this.screenshotEngine.takeScreenshot(session.target, {
@@ -151,6 +230,11 @@ export class MonitoringManager extends EventEmitter {
 
       session.screenshots.push(monitoringScreenshot);
 
+      // Persist session after each screenshot
+      if (this.sessionRepository) {
+        await this.sessionRepository.saveSession(session);
+      }
+
       // Emit events for significant changes
       if (monitoringScreenshot.hasSignificantChange) {
         this.emit('significant_change', {
@@ -160,11 +244,18 @@ export class MonitoringManager extends EventEmitter {
         });
 
         // Auto-generate feedback if enabled
-        if (session.autoFeedback) {
-          logger.info('Significant change detected with autoFeedback enabled', {
+        if (session.autoFeedback && this.autoFeedbackManager) {
+          const triggered = await this.autoFeedbackManager.triggerFeedback(
             sessionId,
-            difference: comparison.differencePercentage
-          });
+            comparison.diffImagePath
+          );
+
+          if (triggered) {
+            logger.info('Auto-feedback triggered for significant change', {
+              sessionId,
+              difference: comparison.differencePercentage
+            });
+          }
         }
       }
 
@@ -175,8 +266,6 @@ export class MonitoringManager extends EventEmitter {
     } catch (error) {
       logger.error('Error capturing monitoring screenshot', error as Error, { sessionId });
       throw error;
-    } finally {
-      this.activeCaptures.delete(sessionId);
     }
   }
 
@@ -219,15 +308,14 @@ export class MonitoringManager extends EventEmitter {
   }
 
   async pauseMonitoring(sessionId: string): Promise<boolean> {
-    const intervalId = this.intervals.get(sessionId);
-    if (!intervalId) return false;
+    const scheduler = this.schedulers.get(sessionId);
+    if (!scheduler) return false;
 
-    clearInterval(intervalId);
-    this.intervals.delete(sessionId);
+    scheduler.stop();
 
     const session = this.sessions.get(sessionId);
     if (session) {
-      // Don't set isActive to false, just pause the interval
+      // Don't set isActive to false, just pause the scheduler
       this.emit('monitoring_paused', { sessionId });
       logger.info('Monitoring session paused', { sessionId });
       return true;
@@ -238,17 +326,12 @@ export class MonitoringManager extends EventEmitter {
 
   async resumeMonitoring(sessionId: string): Promise<boolean> {
     const session = this.sessions.get(sessionId);
-    if (!session || !session.isActive) return false;
+    const scheduler = this.schedulers.get(sessionId);
 
-    // Restart the interval
-    const intervalId = setInterval(() => {
-      void this.captureMonitoringScreenshot(sessionId).catch(error => {
-        logger.error('Error during monitoring interval', error as Error, { sessionId });
-        this.emit('monitoring_error', { sessionId, error });
-      });
-    }, session.interval * 1000);
+    if (!session || !session.isActive || !scheduler) return false;
 
-    this.intervals.set(sessionId, intervalId);
+    // Restart the scheduler
+    scheduler.start();
     logger.info('Monitoring session resumed', { sessionId });
     this.emit('monitoring_resumed', { sessionId });
 
@@ -258,8 +341,14 @@ export class MonitoringManager extends EventEmitter {
   async cleanup(): Promise<void> {
     logger.info('Cleaning up monitoring sessions', {
       activeSessions: this.sessions.size,
-      activeIntervals: this.intervals.size
+      activeSchedulers: this.schedulers.size
     });
+
+    // Stop all schedulers
+    for (const [sessionId, scheduler] of this.schedulers.entries()) {
+      scheduler.stop();
+      this.schedulers.delete(sessionId);
+    }
 
     // Stop all active monitoring sessions
     const sessionIds = Array.from(this.sessions.keys());
@@ -278,20 +367,13 @@ export class MonitoringManager extends EventEmitter {
       })
     );
 
-    for (const [sessionId, intervalId] of this.intervals.entries()) {
-      clearInterval(intervalId);
-      this.intervals.delete(sessionId);
-    }
-
     this.sessions.clear();
-    this.activeCaptures.clear();
-  }
+    this.schedulers.clear();
 
-  private clearInterval(sessionId: string): void {
-    const intervalId = this.intervals.get(sessionId);
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.intervals.delete(sessionId);
+    // Clear auto-feedback state
+    if (this.autoFeedbackManager) {
+      this.autoFeedbackManager.clear();
     }
   }
 }
+

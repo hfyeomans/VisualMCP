@@ -23,7 +23,14 @@ const createDefaultMonitoringConfig = () => ({
   defaultInterval: 5,
   maxSessions: 10,
   significantChangeThreshold: 2,
-  maxScreenshotsPerSession: 1000
+  maxScreenshotsPerSession: 1000,
+  persistSessions: true,
+  sessionsDirectory: path.join(process.cwd(), 'comparisons'),
+  autoFeedbackRateLimitMs: 60000,
+  maxConcurrentFeedback: 2,
+  schedulerJitterMs: 1000,
+  schedulerBackoffMultiplier: 1.5,
+  schedulerMaxBackoffMs: 60000
 });
 
 const createDefaultBrowserConfig = () => ({
@@ -117,7 +124,14 @@ const ConfigSchema = z.object({
       defaultInterval: z.number().int().min(1).max(300).default(5),
       maxSessions: z.number().int().positive().default(10),
       significantChangeThreshold: z.number().min(0).max(100).default(2),
-      maxScreenshotsPerSession: z.number().int().positive().default(1000)
+      maxScreenshotsPerSession: z.number().int().positive().default(1000),
+      persistSessions: z.boolean().default(true),
+      sessionsDirectory: z.string().default(() => path.join(process.cwd(), 'comparisons')),
+      autoFeedbackRateLimitMs: z.number().int().positive().default(60000),
+      maxConcurrentFeedback: z.number().int().positive().default(2),
+      schedulerJitterMs: z.number().int().nonnegative().default(1000),
+      schedulerBackoffMultiplier: z.number().min(1).default(1.5),
+      schedulerMaxBackoffMs: z.number().int().positive().default(60000)
     })
     .default(() => createDefaultMonitoringConfig()),
 
