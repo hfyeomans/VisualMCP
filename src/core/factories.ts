@@ -1,6 +1,7 @@
 import { container } from './container.js';
 import { browserManager } from './browser-manager.js';
 import { cleanupManager } from './resource-manager.js';
+import { config } from './config.js';
 import {
   SERVICE_TOKENS,
   IScreenshotEngine,
@@ -13,6 +14,10 @@ import {
 import { ScreenshotEngine } from '../screenshot/puppeteer.js';
 import { ComparisonEngine } from '../comparison/differ.js';
 import { FeedbackGenerator } from '../analysis/feedback-generator.js';
+import { ColorAnalyzer } from '../analysis/color-analyzer.js';
+import { LayoutAnalyzer } from '../analysis/layout-analyzer.js';
+import { AnalyzerRegistry } from '../analysis/analyzer-interface.js';
+import { MetadataPersistenceService } from '../analysis/metadata-persistence.js';
 import { MonitoringManager } from '../screenshot/monitoring.js';
 import { fileManager } from '../utils/file-utils.js';
 import { imageProcessor } from '../utils/image-utils.js';
@@ -38,7 +43,26 @@ export function registerCoreServices(): void {
   });
 
   container.registerSingleton<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER, () => {
-    return new FeedbackGenerator();
+    const cfg = config.getConfig();
+
+    // Create analyzer registry
+    const registry = new AnalyzerRegistry();
+
+    // Create and register color analyzer
+    const colorAnalyzer = new ColorAnalyzer(cfg.analysis.color);
+    registry.register(colorAnalyzer);
+
+    // Create and register layout analyzer
+    const layoutAnalyzer = new LayoutAnalyzer(cfg.analysis.layout);
+    registry.register(layoutAnalyzer);
+
+    // Create metadata persistence service
+    const metadataPersistence = new MetadataPersistenceService(
+      cfg.analysis.metadataDirectory,
+      cfg.analysis.enableMetadataPersistence
+    );
+
+    return new FeedbackGenerator(registry, metadataPersistence);
   });
 
   container.registerSingleton<IMonitoringManager>(SERVICE_TOKENS.MONITORING_MANAGER, () => {
@@ -60,6 +84,15 @@ export async function initializeCoreServices(): Promise<void> {
 
   const comparisonEngine = container.resolve<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE);
   await comparisonEngine.init();
+
+  const feedbackAnalyzer = container.resolve<IFeedbackAnalyzer>(SERVICE_TOKENS.FEEDBACK_ANALYZER);
+  // Initialize metadata persistence if FeedbackGenerator has it
+  if ('metadataPersistence' in feedbackAnalyzer) {
+    const generator = feedbackAnalyzer as { metadataPersistence?: { init: () => Promise<void> } };
+    if (generator.metadataPersistence?.init) {
+      await generator.metadataPersistence.init();
+    }
+  }
 
   const monitoringManager = container.resolve<IMonitoringManager>(
     SERVICE_TOKENS.MONITORING_MANAGER

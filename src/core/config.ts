@@ -46,6 +46,26 @@ const createDefaultLoggingConfig = () => ({
   logFile: path.join(process.cwd(), 'logs', 'visual-mcp.log')
 });
 
+const createDefaultAnalysisConfig = () => ({
+  color: {
+    lowContrastThreshold: 50,
+    highRedPixelPercentage: 10,
+    lowColorDiversityThreshold: 0.1,
+    veryBrightThreshold: 240,
+    veryDarkThreshold: 15
+  },
+  layout: {
+    minRegionSize: 5,
+    largeLayoutShiftPercentage: 10,
+    mediumLayoutShiftPercentage: 2,
+    highSeverityAreaThreshold: 5000,
+    mediumSeverityAreaThreshold: 1000,
+    edgeAlignmentThreshold: 30
+  },
+  enableMetadataPersistence: true,
+  metadataDirectory: path.join(process.cwd(), 'comparisons', 'metadata')
+});
+
 const createDefaultConfig = () => ({
   outputDir: path.join(process.cwd(), 'screenshots'),
   comparisonsDir: path.join(process.cwd(), 'comparisons'),
@@ -53,6 +73,7 @@ const createDefaultConfig = () => ({
   screenshot: createDefaultScreenshotConfig(),
   comparison: createDefaultComparisonConfig(),
   monitoring: createDefaultMonitoringConfig(),
+  analysis: createDefaultAnalysisConfig(),
   browser: createDefaultBrowserConfig(),
   logging: createDefaultLoggingConfig()
 });
@@ -99,6 +120,69 @@ const ConfigSchema = z.object({
       maxScreenshotsPerSession: z.number().int().positive().default(1000)
     })
     .default(() => createDefaultMonitoringConfig()),
+
+  // Analysis settings
+  analysis: z
+    .object({
+      // Color analysis thresholds
+      color: z
+        .object({
+          lowContrastThreshold: z.number().min(0).max(255).default(50),
+          highRedPixelPercentage: z.number().min(0).max(100).default(10),
+          lowColorDiversityThreshold: z.number().min(0).max(1).default(0.1),
+          veryBrightThreshold: z.number().min(0).max(255).default(240),
+          veryDarkThreshold: z.number().min(0).max(255).default(15)
+        })
+        .default(() => ({
+          lowContrastThreshold: 50,
+          highRedPixelPercentage: 10,
+          lowColorDiversityThreshold: 0.1,
+          veryBrightThreshold: 240,
+          veryDarkThreshold: 15
+        })),
+      // Layout analysis thresholds
+      layout: z
+        .object({
+          minRegionSize: z.number().int().positive().default(5),
+          largeLayoutShiftPercentage: z.number().min(0).max(100).default(10),
+          mediumLayoutShiftPercentage: z.number().min(0).max(100).default(2),
+          highSeverityAreaThreshold: z.number().int().positive().default(5000),
+          mediumSeverityAreaThreshold: z.number().int().positive().default(1000),
+          edgeAlignmentThreshold: z.number().int().positive().default(30)
+        })
+        .default(() => ({
+          minRegionSize: 5,
+          largeLayoutShiftPercentage: 10,
+          mediumLayoutShiftPercentage: 2,
+          highSeverityAreaThreshold: 5000,
+          mediumSeverityAreaThreshold: 1000,
+          edgeAlignmentThreshold: 30
+        })),
+      // General analysis settings
+      enableMetadataPersistence: z.boolean().default(true),
+      metadataDirectory: z
+        .string()
+        .default(() => path.join(process.cwd(), 'comparisons', 'metadata'))
+    })
+    .default(() => ({
+      color: {
+        lowContrastThreshold: 50,
+        highRedPixelPercentage: 10,
+        lowColorDiversityThreshold: 0.1,
+        veryBrightThreshold: 240,
+        veryDarkThreshold: 15
+      },
+      layout: {
+        minRegionSize: 5,
+        largeLayoutShiftPercentage: 10,
+        mediumLayoutShiftPercentage: 2,
+        highSeverityAreaThreshold: 5000,
+        mediumSeverityAreaThreshold: 1000,
+        edgeAlignmentThreshold: 30
+      },
+      enableMetadataPersistence: true,
+      metadataDirectory: path.join(process.cwd(), 'comparisons', 'metadata')
+    })),
 
   // Browser settings
   browser: z
@@ -211,7 +295,10 @@ export class ConfigManager {
 
     // Validate and apply defaults
     try {
-      const mergedConfig = deepMerge(createDefaultConfig(), cleanConfig as DeepPartial<Config>);
+      const mergedConfig = deepMerge(
+        createDefaultConfig(),
+        cleanConfig as unknown as DeepPartial<Config>
+      );
       return ConfigSchema.parse(mergedConfig);
     } catch (error) {
       throw new Error(`Invalid configuration: ${error}`);
