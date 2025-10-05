@@ -23,9 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Graceful shutdown hooks with comprehensive cleanup lifecycle
 - Factory functions for all service initialization
 - Component-specific loggers with structured metadata
+- **Phase 6.1**: Descriptive error for desktop region capture explaining ScreenCaptureKit requirement
+- **Phase 6.1**: Unit tests for region capture error handling
 
 ### Changed
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
+- **Phase 6.1**: Desktop region capture (`target.type = 'region'`) now throws descriptive `ScreenshotError` instead of creating placeholder HTML
 - `no-console` ESLint rule changed from 'warn' to 'error' (intentional console usage requires eslint-disable)
 - All services now use constructor-based dependency injection
 - Configuration manager supports deep merging without overwriting unrelated fields
@@ -39,7 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **CRITICAL**: Persisted monitoring sessions now properly resume after server restart - schedulers are automatically recreated for active sessions
+- **CRITICAL**: Jest ESM import configuration for @modelcontextprotocol/sdk - E2E tests now transform ESM packages correctly
 - Monitoring scheduler config values (jitterMs, backoffMultiplier, maxBackoffMs) now respected instead of hardcoded defaults
+- E2E navigation timeout test increased to 15s to prevent false failures
 - Cleanup manager properly disposes monitoring intervals on shutdown
 - Configuration updates no longer overwrite nested unrelated fields
 - No more overlapping monitoring executions via AsyncScheduler queuing
@@ -48,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Unsupported `window` target type from screenshot schema (not yet implemented)
 - dist/ directory from version control (generated during build/publish only)
+- **Phase 6.1**: Placeholder HTML implementation for desktop region capture (replaced with proper error)
 
 ### Developer Experience
 - Comprehensive E2E tests covering all MCP tools and error handling

@@ -204,7 +204,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
   private async takeRegionScreenshot(
     target: ScreenshotTarget & { type: 'region' },
-    options: {
+    _options: {
       defaultFormat: 'png' | 'jpeg';
       defaultQuality: number;
       defaultViewport: { width: number; height: number };
@@ -216,90 +216,24 @@ export class ScreenshotEngine implements IScreenshotEngine {
       filename?: string;
       clip?: { x: number; y: number; width: number; height: number };
     },
-    filepath: string,
-    timestamp: string
+    _filepath: string,
+    _timestamp: string
   ): Promise<ScreenshotResult> {
-    logger.warn('Desktop region capture not fully implemented, creating placeholder');
-
-    // This is a placeholder implementation - in production, you'd use platform-specific
-    // screen capture APIs or tools like screenshot-desktop
-    const placeholderHtml = `
-      <html>
-        <body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f0f0f0;">
-          <div style="border: 2px dashed #999; padding: 30px; text-align: center; background: white;">
-            <h2 style="color: #666;">Region Screenshot Placeholder</h2>
-            <p><strong>Target Region:</strong> (${target.x}, ${target.y}) ${target.width}×${target.height}</p>
-            <p style="color: #666; font-size: 14px;">
-              Desktop region capture requires platform-specific implementation.
-              <br>This placeholder represents the requested region.
-            </p>
-            <div style="margin-top: 20px; padding: 10px; background: #e8f4f8; border: 1px solid #b8e0f0; border-radius: 4px;">
-              <small>Timestamp: ${timestamp}</small>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    let page: Page | null = null;
-
-    try {
-      page = (await this.browserManager.createPage()) as Page;
-
-      if (page) {
-        await page.setContent(placeholderHtml);
-        await page.setViewport({
-          width: Math.max(target.width, 400),
-          height: Math.max(target.height, 300)
-        });
+    logger.warn('Desktop region capture attempted but not yet implemented', {
+      targetRegion: {
+        x: target.x,
+        y: target.y,
+        width: target.width,
+        height: target.height
       }
+    });
 
-      const screenshotOptions: {
-        path: string;
-        type?: 'png' | 'jpeg';
-        clip?: { x: number; y: number; width: number; height: number };
-        quality?: number;
-      } = {
-        path: filepath,
-        type: options.format || options.defaultFormat,
-        clip: {
-          x: 0,
-          y: 0,
-          width: Math.max(target.width, 400),
-          height: Math.max(target.height, 300)
-        }
-      };
-
-      if ((options.format || options.defaultFormat) === 'jpeg') {
-        screenshotOptions.quality = options.quality || options.defaultQuality;
-      }
-
-      if (page) {
-        await page.screenshot(screenshotOptions);
-      }
-
-      const metadata = await this.imageHelper.getImageMetadata(filepath);
-
-      logger.info('Region screenshot placeholder created', {
-        filepath,
-        region: `${target.x},${target.y} ${target.width}×${target.height}`,
-        size: metadata.size
-      });
-
-      return {
-        filepath,
-        width: metadata.width,
-        height: metadata.height,
-        format: options.format || 'png',
-        size: metadata.size,
-        timestamp,
-        target
-      };
-    } finally {
-      if (page) {
-        await this.browserManager.closePage(page);
-      }
-    }
+    throw new ScreenshotError(
+      'Desktop region capture is not yet implemented. This feature requires native macOS ScreenCaptureKit support, which is currently under development. ' +
+        'Please use URL-based screenshots (target.type = "url") for web content capture. ' +
+        'Native desktop capture (windows, regions, displays) will be available in a future release with interactive content selection via ScreenCaptureKit on macOS 12.3+.',
+      'REGION_CAPTURE_NOT_IMPLEMENTED'
+    );
   }
 
   async listScreenshots(): Promise<string[]> {
