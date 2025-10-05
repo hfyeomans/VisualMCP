@@ -4,7 +4,7 @@
 > The root project README.md is only updated when features are production-ready for end users.
 
 ## Current Status
-**Status**: Phase 6.2.1 (P1/P2 Fixes) - In Progress
+**Status**: Phase 6.2.1 Complete (P1/P2 Fixed) - Ready for Sub-Phase 3
 **Created**: 2025-10-05
 **Last Updated**: 2025-10-05
 
@@ -40,23 +40,26 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 - ✅ Architecture documentation in `sub-phase-2-design.md`
 - ✅ Stub tracking documentation in `stub-tracking.md`
 
-### Sub-Phase 2.1: Critical P1/P2 Fixes ⚙️ IN PROGRESS
+### Sub-Phase 2.1: Critical P1/P2 Fixes ✅ COMPLETE
 **Goal**: Fix option forwarding and platform reporting before Sub-Phase 3
-**Status**: In Progress
+**Status**: Complete
+**Commit**: dfdf46c
 **Dependencies**: Sub-Phase 2
-**Issues**:
-- **P1**: Forward native capture options (format, quality, timeout) to native layer
-  - Currently user options are silently ignored for desktop captures
-  - Need to extend interface and plumb through ScreenshotEngine
-- **P2**: Report actual platform name instead of 'none'
-  - Windows/Linux users see "platform: none" in error messages
-  - Need os.platform() mapping to proper names
+**Issues Fixed**:
+- **P1**: ✅ Forward native capture options (format, quality, timeout) to native layer
+  - User options were silently ignored for desktop captures
+  - Extended `INativeCaptureManager.captureRegion()` to accept full `NativeCaptureOptions`
+  - Plumbed options through `ScreenshotEngine.takeRegionScreenshot()`
+- **P2**: ✅ Report actual platform name instead of 'none'
+  - Windows/Linux users saw "platform: none" in error messages
+  - Added os.platform() mapping (win32→windows, linux→linux)
 **Deliverables**:
-- Update `INativeCaptureManager` methods to accept full `NativeCaptureOptions`
-- Update `ScreenshotEngine.takeRegionScreenshot` to forward options
-- Add platform name mapping in `UnsupportedPlatformCaptureManager`
-- Unit tests for both fixes
-- Updated CHANGELOG
+- ✅ Updated `INativeCaptureManager.captureRegion()` signature
+- ✅ Options construction in `ScreenshotEngine.takeRegionScreenshot()`
+- ✅ Platform name mapping in `UnsupportedPlatformCaptureManager.getPlatform()`
+- ✅ Unit tests for both fixes (11 total tests passing)
+- ✅ Updated CHANGELOG.md and plan.md
+- ✅ Updated state.md documentation structure
 
 ### Sub-Phase 3: Restructure Monitoring Persistence ⏳ PENDING
 **Goal**: Move to per-session directory structure
