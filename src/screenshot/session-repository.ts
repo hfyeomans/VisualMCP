@@ -32,16 +32,23 @@ export class SessionRepository {
   }
 
   /**
-   * Save a session to disk
+   * Save a session to disk (Phase 6.3 - Uses per-session directory structure)
    */
   async saveSession(session: MonitoringSession): Promise<void> {
     try {
+      const sessionDir = this.getSessionDirectory(session.id);
+      const imagesDir = this.getImagesDirectory(session.id);
+
+      // Ensure directory structure exists
+      await fs.ensureDir(imagesDir);
+
       const sessionPath = this.getSessionPath(session.id);
       await fs.writeJson(sessionPath, session, { spaces: 2 });
 
       logger.debug('Session saved', {
         sessionId: session.id,
-        screenshotsCount: session.screenshots.length
+        screenshotsCount: session.screenshots.length,
+        directory: sessionDir
       });
     } catch (error) {
       logger.error('Failed to save session', error as Error, { sessionId: session.id });
@@ -50,10 +57,16 @@ export class SessionRepository {
   }
 
   /**
-   * Load a session from disk
+   * Load a session from disk (Phase 6.3 - Handles migration from legacy format)
    */
   async loadSession(sessionId: string): Promise<MonitoringSession | null> {
     try {
+      // Check if this is a legacy session that needs migration
+      if (await this.isLegacySession(sessionId)) {
+        logger.info('Detected legacy session, auto-migrating', { sessionId });
+        return await this.migrateLegacySession(sessionId);
+      }
+
       const sessionPath = this.getSessionPath(sessionId);
 
       if (!(await fs.pathExists(sessionPath))) {
@@ -72,24 +85,43 @@ export class SessionRepository {
   }
 
   /**
-   * Load all sessions from disk
+   * Load all sessions from disk (Phase 6.3 - Handles both legacy and new formats)
    */
   async loadAllSessions(): Promise<MonitoringSession[]> {
     try {
-      const files = await fs.readdir(this.sessionsDir);
-      const sessionFiles = files.filter(file => file.endsWith('.json'));
+      const entries = await fs.readdir(this.sessionsDir, { withFileTypes: true });
 
+      // Collect session IDs from both formats
+      const sessionIds = new Set<string>();
+
+      // Legacy format: *.json files
+      entries
+        .filter(
+          entry =>
+            entry.isFile() && entry.name.endsWith('.json') && !entry.name.endsWith('.migrated')
+        )
+        .forEach(entry => sessionIds.add(path.basename(entry.name, '.json')));
+
+      // New format: directories with session.json inside
+      for (const entry of entries.filter(e => e.isDirectory())) {
+        const sessionJsonPath = path.join(this.sessionsDir, entry.name, 'session.json');
+        if (await fs.pathExists(sessionJsonPath)) {
+          sessionIds.add(entry.name);
+        }
+      }
+
+      // Load all sessions (auto-migrates legacy ones)
       const sessions = await Promise.all(
-        sessionFiles.map(async file => {
-          const sessionId = path.basename(file, '.json');
-          return this.loadSession(sessionId);
-        })
+        Array.from(sessionIds).map(sessionId => this.loadSession(sessionId))
       );
 
       // Filter out null values
       const validSessions = sessions.filter((s): s is MonitoringSession => s !== null);
 
-      logger.debug('All sessions loaded', { count: validSessions.length });
+      logger.debug('All sessions loaded', {
+        count: validSessions.length,
+        totalFound: sessionIds.size
+      });
 
       return validSessions;
     } catch (error) {
@@ -99,15 +131,23 @@ export class SessionRepository {
   }
 
   /**
-   * Delete a session from disk
+   * Delete a session from disk (Phase 6.3 - Deletes entire session directory)
    */
   async deleteSession(sessionId: string): Promise<boolean> {
     try {
-      const sessionPath = this.getSessionPath(sessionId);
+      const sessionDir = this.getSessionDirectory(sessionId);
 
-      if (await fs.pathExists(sessionPath)) {
-        await fs.remove(sessionPath);
-        logger.debug('Session deleted', { sessionId });
+      if (await fs.pathExists(sessionDir)) {
+        await fs.remove(sessionDir);
+        logger.debug('Session directory deleted', { sessionId, directory: sessionDir });
+        return true;
+      }
+
+      // Also check for legacy format
+      const legacyPath = this.getLegacySessionPath(sessionId);
+      if (await fs.pathExists(legacyPath)) {
+        await fs.remove(legacyPath);
+        logger.debug('Legacy session file deleted', { sessionId });
         return true;
       }
 
@@ -119,12 +159,30 @@ export class SessionRepository {
   }
 
   /**
-   * List all session IDs
+   * List all session IDs (Phase 6.3 - Handles both legacy and new formats)
    */
   async listSessionIds(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.sessionsDir);
-      return files.filter(file => file.endsWith('.json')).map(file => path.basename(file, '.json'));
+      const entries = await fs.readdir(this.sessionsDir, { withFileTypes: true });
+      const sessionIds = new Set<string>();
+
+      // Legacy format: *.json files
+      entries
+        .filter(
+          entry =>
+            entry.isFile() && entry.name.endsWith('.json') && !entry.name.endsWith('.migrated')
+        )
+        .forEach(entry => sessionIds.add(path.basename(entry.name, '.json')));
+
+      // New format: directories
+      for (const entry of entries.filter(e => e.isDirectory())) {
+        const sessionJsonPath = path.join(this.sessionsDir, entry.name, 'session.json');
+        if (await fs.pathExists(sessionJsonPath)) {
+          sessionIds.add(entry.name);
+        }
+      }
+
+      return Array.from(sessionIds);
     } catch (error) {
       logger.error('Failed to list sessions', error as Error);
       return [];
@@ -132,10 +190,107 @@ export class SessionRepository {
   }
 
   /**
-   * Get the file path for a session
+   * Get the directory for a session (Phase 6.3 - Per-session directories)
+   */
+  getSessionDirectory(sessionId: string): string {
+    return path.join(this.sessionsDir, sessionId);
+  }
+
+  /**
+   * Get the images directory for a session
+   */
+  getImagesDirectory(sessionId: string): string {
+    return path.join(this.getSessionDirectory(sessionId), 'images');
+  }
+
+  /**
+   * Get the recordings directory for a session (reserved for future video capture)
+   */
+  getRecordingsDirectory(sessionId: string): string {
+    return path.join(this.getSessionDirectory(sessionId), 'recordings');
+  }
+
+  /**
+   * Get the file path for a session metadata JSON (new structure)
    */
   private getSessionPath(sessionId: string): string {
+    return path.join(this.getSessionDirectory(sessionId), 'session.json');
+  }
+
+  /**
+   * Get legacy flat JSON path for migration detection
+   */
+  private getLegacySessionPath(sessionId: string): string {
     return path.join(this.sessionsDir, `${sessionId}.json`);
+  }
+
+  /**
+   * Detect if a session exists in legacy flat structure
+   */
+  private async isLegacySession(sessionId: string): Promise<boolean> {
+    const legacyPath = this.getLegacySessionPath(sessionId);
+    const newPath = this.getSessionPath(sessionId);
+
+    const legacyExists = await fs.pathExists(legacyPath);
+    const newExists = await fs.pathExists(newPath);
+
+    // Legacy if old format exists and new doesn't
+    return legacyExists && !newExists;
+  }
+
+  /**
+   * Migrate a legacy session to new per-session directory structure
+   */
+  private async migrateLegacySession(sessionId: string): Promise<MonitoringSession | null> {
+    const legacyPath = this.getLegacySessionPath(sessionId);
+
+    try {
+      logger.info('Migrating legacy session to per-session directory', { sessionId });
+
+      // Load legacy session
+      const session = (await fs.readJson(legacyPath)) as MonitoringSession;
+
+      // Create new directory structure
+      const imagesDir = this.getImagesDirectory(sessionId);
+      await fs.ensureDir(imagesDir);
+
+      // Migrate screenshots to images/ directory
+      for (const screenshot of session.screenshots) {
+        const oldPath = screenshot.filepath;
+        const filename = path.basename(oldPath);
+        const newPath = path.join(imagesDir, filename);
+
+        // Copy screenshot if it exists
+        if (await fs.pathExists(oldPath)) {
+          await fs.copy(oldPath, newPath);
+          logger.debug('Migrated screenshot', { from: oldPath, to: newPath });
+        } else {
+          logger.warn('Screenshot file not found during migration', { filepath: oldPath });
+        }
+
+        // Update to relative path for portability
+        screenshot.filepath = path.join('images', filename);
+      }
+
+      // Save to new location
+      const newSessionPath = this.getSessionPath(sessionId);
+      await fs.writeJson(newSessionPath, session, { spaces: 2 });
+
+      // Rename legacy file for safety (can be deleted manually later)
+      const backupPath = `${legacyPath}.migrated`;
+      await fs.rename(legacyPath, backupPath);
+
+      logger.info('Legacy session migrated successfully', {
+        sessionId,
+        screenshotsMigrated: session.screenshots.length,
+        legacyBackup: backupPath
+      });
+
+      return session;
+    } catch (error) {
+      logger.error('Failed to migrate legacy session', error as Error, { sessionId });
+      return null;
+    }
   }
 
   /**

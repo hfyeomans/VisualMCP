@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import path from 'path';
 
 import fs from 'fs-extra';
 import { v4 as uuidv4 } from 'uuid';
@@ -231,22 +232,49 @@ export class MonitoringManager extends EventEmitter {
 
     // AsyncScheduler already prevents overlapping runs, so no need for activeCaptures
     try {
-      // Take screenshot
+      // Take screenshot (initially saved to global screenshots directory)
       const result = await this.screenshotEngine.takeScreenshot(session.target, {
         format: 'png',
         filename: `monitor_${sessionId}_${Date.now()}.png`,
         fullPage: false
       });
 
+      // Move screenshot to per-session images directory if repository exists (Phase 6.3)
+      let finalScreenshotPath = result.filepath;
+      if (this.sessionRepository) {
+        const imagesDir = this.sessionRepository.getImagesDirectory(sessionId);
+        await fs.ensureDir(imagesDir);
+
+        const filename = path.basename(result.filepath);
+        const sessionImagePath = path.join(imagesDir, filename);
+
+        // Only move if source file exists (handles mock scenarios in tests)
+        if (await fs.pathExists(result.filepath)) {
+          await fs.move(result.filepath, sessionImagePath, { overwrite: true });
+
+          logger.debug('Moved screenshot to session directory', {
+            sessionId,
+            from: result.filepath,
+            to: sessionImagePath
+          });
+        }
+
+        // Store as relative path for portability
+        const sessionDir = this.sessionRepository.getSessionDirectory(sessionId);
+        finalScreenshotPath = path.relative(sessionDir, sessionImagePath);
+      }
+
       // Compare with reference
       const comparison = await this.comparisonEngine.compare(
-        result.filepath,
+        this.sessionRepository
+          ? path.join(this.sessionRepository.getSessionDirectory(sessionId), finalScreenshotPath)
+          : finalScreenshotPath,
         session.referenceImagePath,
         { tolerance: 5 }
       );
 
       const monitoringScreenshot: MonitoringScreenshot = {
-        filepath: result.filepath,
+        filepath: finalScreenshotPath,
         timestamp: result.timestamp,
         differencePercentage: comparison.differencePercentage,
         hasSignificantChange: comparison.differencePercentage > 2 // 2% threshold

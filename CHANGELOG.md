@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.2.1**: P1 schema fix - Added `timeout` and `waitForNetworkIdle` to `ScreenshotOptionsSchema` (prevents Zod stripping)
 - **Phase 6.2.1**: P2 fix - Platform name mapping for accurate error messages (win32→windows, linux→linux)
 - **Phase 6.2.1**: Regression test ensuring timeout=5000 reaches native manager (not default 30000)
+- **Phase 6.3**: Per-session directory structure for monitoring artifacts (`sessions/<id>/session.json`, `sessions/<id>/images/`)
+- **Phase 6.3**: Automatic migration from legacy flat JSON format to per-session directories
+- **Phase 6.3**: Public methods: `getSessionDirectory()`, `getImagesDirectory()`, `getRecordingsDirectory()` (future video support)
+- **Phase 6.3**: 16 comprehensive unit tests for persistence and migration (all passing)
 
 ### Changed
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
@@ -46,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.2.1**: `INativeCaptureManager.captureRegion()` now accepts full `NativeCaptureOptions` instead of bare coordinates
 - **Phase 6.2.1**: User-supplied format, quality, and timeout options now forwarded to native capture layer
 - **Phase 6.2.1**: Platform name mapping in error messages (Windows shows "windows" not "none")
+- **Phase 6.3**: `SessionRepository` now uses per-session directories (`sessions/<id>/session.json`)
+- **Phase 6.3**: `MonitoringManager` stores screenshots in session-specific `images/` directories
+- **Phase 6.3**: Screenshot paths stored as relative paths for portability
+- **Phase 6.3**: Automatic migration from legacy flat structure on first load
+- **Phase 6.3**: Legacy files backed up as `*.json.migrated` after migration
 - `no-console` ESLint rule changed from 'warn' to 'error' (intentional console usage requires eslint-disable)
 - All services now use constructor-based dependency injection
 - Configuration manager supports deep merging without overwriting unrelated fields
