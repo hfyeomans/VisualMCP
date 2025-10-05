@@ -43,23 +43,42 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 ### Sub-Phase 2.1: Critical P1/P2 Fixes ✅ COMPLETE
 **Goal**: Fix option forwarding and platform reporting before Sub-Phase 3
 **Status**: Complete
-**Commit**: dfdf46c
+**Commits**: dfdf46c (interface/plumbing), TBD (schema completion)
 **Dependencies**: Sub-Phase 2
+
 **Issues Fixed**:
-- **P1**: ✅ Forward native capture options (format, quality, timeout) to native layer
-  - User options were silently ignored for desktop captures
-  - Extended `INativeCaptureManager.captureRegion()` to accept full `NativeCaptureOptions`
-  - Plumbed options through `ScreenshotEngine.takeRegionScreenshot()`
-- **P2**: ✅ Report actual platform name instead of 'none'
-  - Windows/Linux users saw "platform: none" in error messages
-  - Added os.platform() mapping (win32→windows, linux→linux)
+
+**P1 - Forward Native Capture Options** [HIGH PRIORITY] ✅
+- **Root Cause** (Multi-part):
+  1. `ScreenshotOptionsSchema` was missing `timeout` and `waitForNetworkIdle` fields → Zod stripped them
+  2. Interface only accepted bare region coordinates → couldn't forward options
+  3. Options never reached native layer
+- **Fixes Applied**:
+  - ✅ Added `timeout: z.number().int().positive().optional()` to `ScreenshotOptionsSchema`
+  - ✅ Added `waitForNetworkIdle: z.boolean().optional()` to `ScreenshotOptionsSchema`
+  - ✅ Extended `INativeCaptureManager.captureRegion()` to accept full `NativeCaptureOptions`
+  - ✅ Constructed complete options object in `ScreenshotEngine.takeRegionScreenshot()`
+  - ✅ Options now include: region, format, quality, timeout, outputPath
+- **Verification**:
+  - Test "should forward timeout option to native manager (P1 schema fix)" verifies timeout=5000 reaches native manager
+  - Previously timeout was always 30000 (config default) regardless of user input
+  - Now user-supplied timeout properly flows through entire chain
+
+**P2 - Report Actual Platform Name** [MEDIUM PRIORITY] ✅
+- **Root Cause**: `UnsupportedPlatformCaptureManager.getPlatform()` returned 'none' for all platforms
+- **Fix**: Platform name mapping in `getPlatform()` switch statement
+  - `win32` → `'windows'`
+  - `linux` → `'linux'`
+  - Others → `'none'`
+- **Verification**: Error messages now show actual platform name
+
 **Deliverables**:
+- ✅ Schema updated with timeout and waitForNetworkIdle fields
 - ✅ Updated `INativeCaptureManager.captureRegion()` signature
 - ✅ Options construction in `ScreenshotEngine.takeRegionScreenshot()`
 - ✅ Platform name mapping in `UnsupportedPlatformCaptureManager.getPlatform()`
-- ✅ Unit tests for both fixes (11 total tests passing)
-- ✅ Updated CHANGELOG.md and plan.md
-- ✅ Updated state.md documentation structure
+- ✅ Unit tests for both fixes (12 total tests passing, added 3 new tests)
+- ✅ Updated CHANGELOG.md, plan.md, and stub-tracking.md
 
 ### Sub-Phase 3: Restructure Monitoring Persistence ⏳ PENDING
 **Goal**: Move to per-session directory structure

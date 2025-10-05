@@ -6,6 +6,35 @@ This document tracks all stub implementations that need to be completed before P
 
 ---
 
+## Critical Fixes (Phase 6.2.1)
+
+### ✅ P1: Forward Native Capture Options - COMPLETE
+**Issue**: User-supplied options (format, quality, timeout) were silently ignored for desktop captures
+**Root Cause**:
+1. `ScreenshotOptionsSchema` was missing `timeout` and `waitForNetworkIdle` fields
+2. Zod stripped these fields before they reached `ScreenshotEngine`
+3. Interface only accepted bare region coordinates
+
+**Fixed**:
+- ✅ Added `timeout` and `waitForNetworkIdle` to `ScreenshotOptionsSchema` (Commit: TBD)
+- ✅ Updated `INativeCaptureManager.captureRegion()` to accept full `NativeCaptureOptions` (Commit: dfdf46c)
+- ✅ Plumbed options from `ScreenshotEngine.takeRegionScreenshot()` through to native manager (Commit: dfdf46c)
+- ✅ Added regression test verifying timeout reaches native manager
+
+**Verification**: Test "should forward timeout option to native manager (P1 schema fix)" passes
+
+### ✅ P2: Report Actual Unsupported Platform - COMPLETE
+**Issue**: Windows/Linux users saw "platform: none" instead of actual platform name
+**Root Cause**: `UnsupportedPlatformCaptureManager.getPlatform()` always returned 'none'
+
+**Fixed**:
+- ✅ Added platform name mapping (win32→windows, linux→linux) (Commit: dfdf46c)
+- ✅ Updated error messages to show actual platform
+
+**Verification**: Test "should include actual platform name in error message" passes
+
+---
+
 ## Stub Implementations
 
 ### 1. MacOSCaptureManager.captureInteractive()

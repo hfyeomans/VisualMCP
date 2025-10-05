@@ -218,6 +218,42 @@ describe('ScreenshotEngine', () => {
       );
     });
 
+    it('should forward timeout option to native manager (P1 schema fix)', async () => {
+      const target: ScreenshotTarget = {
+        type: 'region',
+        x: 100,
+        y: 100,
+        width: 800,
+        height: 600
+      };
+
+      const userOptions = {
+        timeout: 5000,
+        waitForNetworkIdle: false
+      };
+
+      const mockResult: NativeCaptureResult = {
+        filepath: '/tmp/screenshot.png',
+        width: 800,
+        height: 600,
+        format: 'png',
+        size: 12345,
+        timestamp: new Date().toISOString()
+      };
+
+      (mockNativeManager.captureRegion as jest.Mock).mockResolvedValue(mockResult);
+
+      await engineWithNative.takeScreenshot(target, userOptions);
+
+      // Verify timeout is forwarded (critical P1 regression test)
+      expect(mockNativeManager.captureRegion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeout: 5000,
+          format: 'png'
+        })
+      );
+    });
+
     it('should throw error if platform not available', async () => {
       (mockNativeManager.isAvailable as jest.Mock).mockResolvedValue(false);
       (mockNativeManager.getPlatform as jest.Mock).mockReturnValue('none');

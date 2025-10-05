@@ -32,7 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.2**: Factory function `createNativeCaptureManager()` for platform-specific managers
 - **Phase 6.2**: Comprehensive unit tests for native capture manager integration (9 test cases)
 - **Phase 6.2.1**: P1 fix - Native capture now receives full user options (format, quality, timeout)
+- **Phase 6.2.1**: P1 schema fix - Added `timeout` and `waitForNetworkIdle` to `ScreenshotOptionsSchema` (prevents Zod stripping)
 - **Phase 6.2.1**: P2 fix - Platform name mapping for accurate error messages (win32→windows, linux→linux)
+- **Phase 6.2.1**: Regression test ensuring timeout=5000 reaches native manager (not default 30000)
 
 ### Changed
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
@@ -40,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.2**: `ScreenshotEngine` now accepts optional `INativeCaptureManager` parameter (follows `BrowserManager` pattern)
 - **Phase 6.2**: Region capture delegates to native manager when available, platform-aware error handling
 - **Phase 6.2**: Enhanced cleanup lifecycle includes native capture manager cleanup
+- **Phase 6.2.1**: `ScreenshotOptionsSchema` now accepts `timeout` and `waitForNetworkIdle` fields (user-facing)
 - **Phase 6.2.1**: `INativeCaptureManager.captureRegion()` now accepts full `NativeCaptureOptions` instead of bare coordinates
 - **Phase 6.2.1**: User-supplied format, quality, and timeout options now forwarded to native capture layer
 - **Phase 6.2.1**: Platform name mapping in error messages (Windows shows "windows" not "none")
