@@ -4,7 +4,7 @@
 > The root project README.md is only updated when features are production-ready for end users.
 
 ## Current Status
-**Status**: Phase 6.2.1 Complete (P1/P2 Fixed) - Ready for Sub-Phase 3
+**Status**: Sub-Phase 3 Complete (Monitoring Persistence) - Ready for Sub-Phase 3.5
 **Created**: 2025-10-05
 **Last Updated**: 2025-10-05
 
@@ -80,15 +80,23 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 - ✅ Unit tests for both fixes (12 total tests passing, added 3 new tests)
 - ✅ Updated CHANGELOG.md, plan.md, and stub-tracking.md
 
-### Sub-Phase 3: Restructure Monitoring Persistence ⏳ PENDING
+### Sub-Phase 3: Restructure Monitoring Persistence ✅ COMPLETE
 **Goal**: Move to per-session directory structure
-**Status**: Not Started
+**Status**: Complete
+**Commit**: 2435a0b
 **Dependencies**: Sub-Phase 2.1 (P1/P2 fixes)
 **Deliverables**:
-- Updated `SessionRepository` with new directory layout
-- Migration logic for legacy files
-- Updated `MonitoringManager` for per-session paths
-- Integration tests for persistence
+- ✅ Per-session directory structure (`sessions/<id>/session.json`, `sessions/<id>/images/`)
+- ✅ Public methods: `getSessionDirectory()`, `getImagesDirectory()`, `getRecordingsDirectory()`
+- ✅ Automatic migration from legacy flat JSON format
+- ✅ Legacy detection with `isLegacySession()` method
+- ✅ Migration logic in `migrateLegacySession()` with safety checks
+- ✅ Updated `MonitoringManager` to store screenshots in per-session directories
+- ✅ Relative path storage for portability
+- ✅ Legacy files backed up as `*.json.migrated`
+- ✅ 16 comprehensive unit tests (all passing)
+- ✅ Updated existing tests for new structure
+- ✅ Added 3 migration-specific test suites
 
 ### Sub-Phase 3.5: Feature Flag Evaluation ⏳ PENDING
 **Goal**: Evaluate feasibility of independent toggle switches for browser vs native capture
