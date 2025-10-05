@@ -10,7 +10,8 @@ import {
   IScreenshotEngine,
   IBrowserManager,
   IFileManager,
-  IImageProcessor
+  IImageProcessor,
+  INativeCaptureManager
 } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
 import { fileManager } from '../utils/file-utils.js';
@@ -30,11 +31,17 @@ export class ScreenshotEngine implements IScreenshotEngine {
   constructor(
     private browserManager: IBrowserManager,
     private readonly fileHelper: IFileManager = fileManager,
-    private readonly imageHelper: IImageProcessor = imageProcessor
+    private readonly imageHelper: IImageProcessor = imageProcessor,
+    private readonly nativeCaptureManager?: INativeCaptureManager
   ) {
     this.outputDir = config.outputDir;
     this.browserSession = new BrowserSession();
-    logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
+
+    logger.debug('ScreenshotEngine initialized', {
+      outputDir: this.outputDir,
+      hasNativeCapture: !!this.nativeCaptureManager,
+      nativePlatform: this.nativeCaptureManager?.getPlatform() || 'none'
+    });
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -204,7 +211,7 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
   private async takeRegionScreenshot(
     target: ScreenshotTarget & { type: 'region' },
-    _options: {
+    options: {
       defaultFormat: 'png' | 'jpeg';
       defaultQuality: number;
       defaultViewport: { width: number; height: number };
@@ -219,21 +226,58 @@ export class ScreenshotEngine implements IScreenshotEngine {
     _filepath: string,
     _timestamp: string
   ): Promise<ScreenshotResult> {
-    logger.warn('Desktop region capture attempted but not yet implemented', {
-      targetRegion: {
-        x: target.x,
-        y: target.y,
-        width: target.width,
-        height: target.height
-      }
+    // Check if native capture manager is available
+    if (!this.nativeCaptureManager) {
+      logger.warn('Desktop region capture attempted but no native capture manager available', {
+        targetRegion: { x: target.x, y: target.y, width: target.width, height: target.height }
+      });
+
+      throw new ScreenshotError(
+        'Desktop region capture is not available. Native capture manager not initialized. ' +
+          'This feature requires macOS with ScreenCaptureKit support. ' +
+          'Please use URL-based screenshots (target.type = "url") for web content capture.',
+        'NATIVE_CAPTURE_UNAVAILABLE'
+      );
+    }
+
+    // Check platform availability
+    const isAvailable = await this.nativeCaptureManager.isAvailable();
+    if (!isAvailable) {
+      const platform = this.nativeCaptureManager.getPlatform();
+      logger.warn('Native capture not available on this platform', { platform });
+
+      throw new ScreenshotError(
+        `Native desktop capture is not supported on platform: ${platform}. ` +
+          'Currently only macOS (via ScreenCaptureKit) is supported. ' +
+          'Please use URL-based screenshots (target.type = "url") as an alternative.',
+        'PLATFORM_NOT_SUPPORTED'
+      );
+    }
+
+    logger.info('Attempting native desktop region capture', {
+      targetRegion: { x: target.x, y: target.y, width: target.width, height: target.height },
+      format: options.format || options.defaultFormat,
+      platform: this.nativeCaptureManager.getPlatform()
     });
 
-    throw new ScreenshotError(
-      'Desktop region capture is not yet implemented. This feature requires native macOS ScreenCaptureKit support, which is currently under development. ' +
-        'Please use URL-based screenshots (target.type = "url") for web content capture. ' +
-        'Native desktop capture (windows, regions, displays) will be available in a future release with interactive content selection via ScreenCaptureKit on macOS 12.3+.',
-      'REGION_CAPTURE_NOT_IMPLEMENTED'
-    );
+    // Delegate to native capture manager
+    const result = await this.nativeCaptureManager.captureRegion({
+      x: target.x,
+      y: target.y,
+      width: target.width,
+      height: target.height
+    });
+
+    // Convert native result to ScreenshotResult format
+    return {
+      filepath: result.filepath,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      size: result.size,
+      timestamp: result.timestamp,
+      target
+    };
   }
 
   async listScreenshots(): Promise<string[]> {
@@ -287,6 +331,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
   async cleanup(): Promise<void> {
     logger.info('Cleaning up ScreenshotEngine');
+
+    // Cleanup native capture manager if present
+    if (this.nativeCaptureManager) {
+      await this.nativeCaptureManager.cleanup();
+    }
+
     // Cleanup is handled by BrowserManager
     // Any additional cleanup specific to ScreenshotEngine would go here
   }

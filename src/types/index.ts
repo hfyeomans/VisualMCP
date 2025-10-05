@@ -235,3 +235,6 @@ export interface MonitoringSummary {
   screenshots: MonitoringScreenshot[];
   target: ScreenshotTarget;
 }
+
+// Native desktop capture types (Phase 6)
+export * from './native-capture.js';

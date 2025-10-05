@@ -25,10 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Component-specific loggers with structured metadata
 - **Phase 6.1**: Descriptive error for desktop region capture explaining ScreenCaptureKit requirement
 - **Phase 6.1**: Unit tests for region capture error handling
+- **Phase 6.2**: `INativeCaptureManager` interface following `BrowserManager` pattern
+- **Phase 6.2**: `MacOSCaptureManager` stub implementation for ScreenCaptureKit integration
+- **Phase 6.2**: `UnsupportedPlatformCaptureManager` for non-macOS platforms
+- **Phase 6.2**: Native capture type definitions (`NativeCaptureOptions`, `NativeCaptureResult`, `NativeCaptureConfig`)
+- **Phase 6.2**: Factory function `createNativeCaptureManager()` for platform-specific managers
+- **Phase 6.2**: Comprehensive unit tests for native capture manager integration (9 test cases)
 
 ### Changed
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
 - **Phase 6.1**: Desktop region capture (`target.type = 'region'`) now throws descriptive `ScreenshotError` instead of creating placeholder HTML
+- **Phase 6.2**: `ScreenshotEngine` now accepts optional `INativeCaptureManager` parameter (follows `BrowserManager` pattern)
+- **Phase 6.2**: Region capture delegates to native manager when available, platform-aware error handling
+- **Phase 6.2**: Enhanced cleanup lifecycle includes native capture manager cleanup
 - `no-console` ESLint rule changed from 'warn' to 'error' (intentional console usage requires eslint-disable)
 - All services now use constructor-based dependency injection
 - Configuration manager supports deep merging without overwriting unrelated fields
