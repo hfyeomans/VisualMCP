@@ -58,15 +58,16 @@ export class MacOSCaptureManager extends EventEmitter implements INativeCaptureM
    * Capture a specific desktop region by coordinates
    *
    * Phase 6.2: Stub implementation - throws not implemented error
-   * Phase 6.3+: Will spawn Swift helper with specific region coordinates
+   * Phase 6.3+: Will spawn Swift helper with full capture options
+   * @param options - Full capture options including region, format, quality, timeout
    */
-  async captureRegion(_region: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): Promise<NativeCaptureResult> {
-    logger.warn('Region capture called but not yet implemented');
+  async captureRegion(_options: NativeCaptureOptions): Promise<NativeCaptureResult> {
+    logger.warn('Region capture called but not yet implemented', {
+      hasRegion: !!_options.region,
+      format: _options.format,
+      quality: _options.quality,
+      timeout: _options.timeout
+    });
 
     throw new ScreenshotError(
       'Desktop region capture not yet implemented. ' +
@@ -149,14 +150,10 @@ export class UnsupportedPlatformCaptureManager
     );
   }
 
-  async captureRegion(_region: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): Promise<NativeCaptureResult> {
+  async captureRegion(_options: NativeCaptureOptions): Promise<NativeCaptureResult> {
+    const platformName = this.getPlatform();
     throw new ScreenshotError(
-      `Native desktop capture is not supported on ${this.platform}. ` +
+      `Native desktop capture is not supported on ${platformName}. ` +
         'Currently only macOS (via ScreenCaptureKit) is supported. ' +
         'Use URL-based screenshots (target.type = "url") as an alternative.',
       'PLATFORM_NOT_SUPPORTED'
@@ -168,7 +165,17 @@ export class UnsupportedPlatformCaptureManager
   }
 
   getPlatform(): string {
-    return 'none';
+    // Map os.platform() to proper platform names (P2 fix)
+    switch (this.platform) {
+      case 'win32':
+        return 'windows';
+      case 'darwin':
+        return 'macos'; // Should not reach here (MacOSCaptureManager handles darwin)
+      case 'linux':
+        return 'linux';
+      default:
+        return 'none';
+    }
   }
 
   async cleanup(): Promise<void> {

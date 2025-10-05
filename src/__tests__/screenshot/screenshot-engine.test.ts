@@ -162,15 +162,60 @@ describe('ScreenshotEngine', () => {
       const result = await engineWithNative.takeScreenshot(target);
 
       expect(mockNativeManager.isAvailable).toHaveBeenCalled();
-      expect(mockNativeManager.captureRegion).toHaveBeenCalledWith({
-        x: 100,
-        y: 100,
-        width: 800,
-        height: 600
-      });
+      expect(mockNativeManager.captureRegion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: {
+            x: 100,
+            y: 100,
+            width: 800,
+            height: 600
+          },
+          format: 'png',
+          outputPath: expect.stringContaining('screenshot')
+        })
+      );
       expect(result.filepath).toBe('/tmp/screenshot.png');
       expect(result.width).toBe(800);
       expect(result.height).toBe(600);
+    });
+
+    it('should forward user options to native manager (P1 fix)', async () => {
+      const target: ScreenshotTarget = {
+        type: 'region',
+        x: 50,
+        y: 50,
+        width: 640,
+        height: 480
+      };
+
+      const userOptions = {
+        format: 'jpeg' as const,
+        quality: 85,
+        filename: 'custom-screenshot.jpg'
+      };
+
+      const mockResult: NativeCaptureResult = {
+        filepath: '/tmp/custom-screenshot.jpg',
+        width: 640,
+        height: 480,
+        format: 'jpeg',
+        size: 54321,
+        timestamp: new Date().toISOString()
+      };
+
+      (mockNativeManager.captureRegion as jest.Mock).mockResolvedValue(mockResult);
+
+      await engineWithNative.takeScreenshot(target, userOptions);
+
+      // Verify options are forwarded (P1 fix verification)
+      expect(mockNativeManager.captureRegion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: { x: 50, y: 50, width: 640, height: 480 },
+          format: 'jpeg',
+          quality: 85,
+          outputPath: expect.stringContaining('custom-screenshot.jpg')
+        })
+      );
     });
 
     it('should throw error if platform not available', async () => {
@@ -198,6 +243,43 @@ describe('ScreenshotEngine', () => {
     it('should cleanup native manager on engine cleanup', async () => {
       await engineWithNative.cleanup();
       expect(mockNativeManager.cleanup).toHaveBeenCalled();
+    });
+  });
+
+  describe('Platform Name Reporting (P2 fix)', () => {
+    it('should include actual platform name in error message', async () => {
+      const mockWindowsManager: INativeCaptureManager = {
+        captureInteractive: jest.fn(),
+        captureRegion: jest.fn(),
+        isAvailable: jest.fn().mockResolvedValue(false),
+        getPlatform: jest.fn().mockReturnValue('windows'),
+        cleanup: jest.fn()
+      };
+
+      const engineWithWindows = new ScreenshotEngine(
+        mockBrowserManager,
+        mockFileManager,
+        mockImageProcessor,
+        mockWindowsManager
+      );
+
+      const target: ScreenshotTarget = {
+        type: 'region',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      };
+
+      try {
+        await engineWithWindows.takeScreenshot(target);
+        fail('Expected error to be thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ScreenshotError);
+        const screenshotError = error as ScreenshotError;
+        expect(screenshotError.message).toContain('windows');
+        expect(screenshotError.message).not.toContain('none');
+      }
     });
   });
 

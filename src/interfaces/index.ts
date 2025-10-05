@@ -86,13 +86,9 @@ export interface INativeCaptureManager {
 
   /**
    * Capture a specific desktop region by coordinates
+   * @param options - Full capture options including region, format, quality, timeout
    */
-  captureRegion(region: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): Promise<NativeCaptureResult>;
+  captureRegion(options: NativeCaptureOptions): Promise<NativeCaptureResult>;
 
   /**
    * Check if native capture is available on this platform

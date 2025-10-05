@@ -260,13 +260,22 @@ export class ScreenshotEngine implements IScreenshotEngine {
       platform: this.nativeCaptureManager.getPlatform()
     });
 
+    // Construct full NativeCaptureOptions from ScreenshotOptions (P1 fix)
+    const nativeCaptureOptions = {
+      region: {
+        x: target.x,
+        y: target.y,
+        width: target.width,
+        height: target.height
+      },
+      format: options.format || options.defaultFormat,
+      quality: options.quality || (options.format === 'jpeg' ? options.defaultQuality : undefined),
+      timeout: options.timeout,
+      outputPath: _filepath
+    };
+
     // Delegate to native capture manager
-    const result = await this.nativeCaptureManager.captureRegion({
-      x: target.x,
-      y: target.y,
-      width: target.width,
-      height: target.height
-    });
+    const result = await this.nativeCaptureManager.captureRegion(nativeCaptureOptions);
 
     // Convert native result to ScreenshotResult format
     return {

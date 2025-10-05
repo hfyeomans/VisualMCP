@@ -8,34 +8,88 @@
 
 ## Work Breakdown
 
-### 1. Guardrail current region capture path
+### Phase 6.2.1: Critical Fixes Before Sub-Phase 3
+
+**P1 - Forward Native Capture Options** [HIGH PRIORITY]
+- **Issue**: User-supplied options (format, quality, timeout) are silently ignored for desktop captures
+- **Location**: `src/interfaces/index.ts:85`, `src/screenshot/puppeteer.ts:264`
+- **Impact**: When Swift helper lands, all desktop captures will use hardcoded defaults
+- **Fix Required**:
+  - Extend `INativeCaptureManager.captureRegion()` to accept `NativeCaptureOptions`
+  - Update `INativeCaptureManager.captureInteractive()` to accept `NativeCaptureOptions`
+  - Plumb options from `ScreenshotEngine.takeRegionScreenshot()` through to native manager
+  - Ensure format, quality, timeout, outputPath are forwarded
+- **Testing**: Verify options are passed correctly with mock manager
+
+**P2 - Report Actual Unsupported Platform** [MEDIUM PRIORITY]
+- **Issue**: Windows/Linux users see "platform: none" instead of actual platform name
+- **Location**: `src/core/native-capture-manager.ts:162-174`
+- **Impact**: Misleading diagnostics, contradicts `NativeCapturePlatform` type
+- **Fix Required**:
+  - Map `os.platform()` results to proper platform names
+  - 'win32' → 'windows'
+  - 'linux' → 'linux'
+  - Others → 'none'
+  - Update `UnsupportedPlatformCaptureManager.getPlatform()`
+- **Testing**: Verify error messages on different platforms
+
+**Status**: Must complete before Sub-Phase 3 (Monitoring Persistence)
+
+---
+
+### 1. Guardrail current region capture path [✅ COMPLETE - Phase 6.1]
 - Update `ScreenshotEngine.takeRegionScreenshot` to throw a descriptive `ScreenshotError` explaining that desktop capture requires macOS support currently under development.
 - Ensure downstream call sites/tests expect this error; add/adjust unit tests in `src/screenshot/__tests__`.
 - Document the temporary limitation in user-facing docs and MCP metadata.
 
-### 2. Define desktop capture adapter layer
-- Create `IDesktopCaptureAdapter` (TypeScript interface under `src/interfaces/desktop-capture.ts`), specifying methods such as `captureInteractive`, `captureRegion`, and `captureWindow`.
-- Implement `NoopDesktopCaptureAdapter` returning structured `ScreenshotError`s and register it within `ScreenshotEngine` so the engine consults the adapter for non-web captures.
-- Update dependency injection/config wiring to accept future adapter instances (e.g., via `config.screenshot.desktopAdapter` or service locator), respecting linting/typing rules from `AGENTS.md`.
+### 2. Define desktop capture adapter layer [✅ COMPLETE - Phase 6.2]
+- Created `INativeCaptureManager` interface following `BrowserManager` pattern
+- Implemented `MacOSCaptureManager` stub with clear error messages
+- Implemented `UnsupportedPlatformCaptureManager` for non-macOS platforms
+- Integrated into `ScreenshotEngine` as optional dependency
+- Created comprehensive type definitions and factory function
+- **Note**: Stub implementations tracked in `stub-tracking.md`
 
-### 3. Plan interactive macOS ScreenCaptureKit helper
-- Based on `SCREEN_CAPTURE_RESEARCH.md`, draft the architecture for a Swift helper:
-  - SwiftUI picker enumerates content through `SCShareableContent` and lets users choose display/window/region interactively.
-  - On selection, configure `SCContentFilter` and `SCStreamConfiguration`, start an `SCStream`, and write the first (or requested number of) frames to disk under the provided output directory.
-  - Expose a CLI/IPC contract (e.g., JSON over stdio) describing the requested capture type and returning file path + metadata.
-  - Emit a roadmap note that automation (programmatic window/region capture) will reuse this helper with a non-interactive flow.
-- Capture these design details plus permission requirements in docs (e.g., ADR or `docs/` entry) so implementation aligns with research.
-
-### 4. Restructure monitoring persistence
+### 3. Restructure monitoring persistence [⏳ PENDING - Sub-Phase 3]
 - Adjust `SessionRepository` to read/write manifests at `comparisons/sessions/<sessionId>/session.json`; create `images/` subdir for screenshots (and `recordings/` reserved for later).
 - Update `MonitoringManager` to place screenshots into the per-session `images/` folder and record relative paths in session metadata.
 - Provide migration logic: when loading, detect legacy flat JSON (no per-session directory) and either move files or load in place while rewriting to the new layout.
 - Extend integration tests (e.g., `monitoring-integration.test.ts`) to assert restart flows with the new directory structure.
 
-### 5. Testing & Documentation
-- Unit tests: cover adapter error behaviour, repository path changes, and config defaults.
-- Integration tests: ensure monitoring restart rebuilds schedulers with per-session paths.
-- Documentation: update usage guides to clarify interactive macOS capture support, future automation plans, the new persistence layout, and ScreenCaptureKit prerequisites (Screen Recording permission, macOS Tahoe 26+).
+### 4. Swift ScreenCaptureKit helper implementation [⏳ PENDING - Phase 6.3+]
+- Based on `SCREEN_CAPTURE_RESEARCH.md`, implement Swift helper:
+  - SwiftUI picker enumerates content through `SCShareableContent`
+  - On selection, configure `SCContentFilter` and `SCStreamConfiguration`
+  - Start `SCStream`, write frames to disk
+  - Expose CLI/IPC contract (JSON over stdio)
+  - Automation support (programmatic capture) for future
+- See `stub-tracking.md` for implementation requirements
+
+### 5. Feature flag evaluation [⏳ PENDING - Sub-Phase 3.5]
+**Goal**: Evaluate feasibility of independent toggle switches for browser vs native capture
+- **Rationale**: Allow selective enablement/disablement of capture types
+- **Use Cases**:
+  - Security: Disable desktop capture in restricted environments
+  - Performance: Reduce resource usage by disabling unused capture types
+  - Testing: Isolate capture types during development
+  - Platform-specific: Auto-disable native capture on unsupported platforms
+- **Implementation Considerations**:
+  - Configuration structure: `config.capture.web.enabled`, `config.capture.native.enabled`
+  - Dependency injection: Conditionally create managers based on flags
+  - Error handling: Clear messages when feature is disabled vs unavailable
+  - Default values: Web enabled by default, native auto-detected
+  - Migration: Backward compatibility with current setup
+- **Evaluation Criteria**:
+  - Complexity vs benefit analysis
+  - Impact on existing architecture
+  - Testing requirements
+  - Documentation overhead
+- **Output**: Design document with recommendation (implement, defer, or reject)
+
+### 6. Testing & Documentation [⏳ PENDING - Phase 6.5]
+- Unit tests: cover adapter error behaviour, repository path changes, and config defaults
+- Integration tests: ensure monitoring restart rebuilds schedulers with per-session paths
+- Documentation: update usage guides to clarify interactive macOS capture support, future automation plans, the new persistence layout, and ScreenCaptureKit prerequisites (Screen Recording permission, macOS Tahoe 26+)
 
 ## Deliverables & Artifacts
 - Updated TypeScript sources following linting/typing standards; no `any`, single quotes, no semicolons.
