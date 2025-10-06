@@ -111,47 +111,42 @@ This document tracks all stub implementations that need to be completed before P
 
 ## Integration Points Requiring Implementation
 
-### 5. ScreenshotEngine - Native Manager Wiring
-**Location**: `src/screenshot/puppeteer.ts:35`
-**Status**: ⚠️ PARTIAL - Optional Parameter Exists, Not Wired in Production
-**Current Behavior**: Native manager can be passed but isn't instantiated anywhere in production code
-**Required Implementation**:
-- Update `src/index.ts` to instantiate native capture manager
-- Call `createNativeCaptureManager()` factory function
-- Pass manager instance to `ScreenshotEngine` constructor
-- Register cleanup handler with `CleanupManager`
+### 5. ScreenshotEngine - Native Manager Wiring ✅ COMPLETE
+**Location**: `src/core/factories.ts:39-44`
+**Status**: ✅ COMPLETE - Wired in Production (Phase 6.4)
+**Implementation**:
+- ✅ Updated `src/core/factories.ts` to call `createNativeCaptureManager()`
+- ✅ Native manager passed to `ScreenshotEngine` constructor in factory
+- ✅ Cleanup handled via `ScreenshotEngine.cleanup()` (calls `nativeCaptureManager.cleanup()`)
+- ✅ Platform-aware: Factory returns appropriate manager for current platform
 
-**Implementation Plan**: Phase 6.3
-**Related Files**:
-- `src/index.ts` - Main server initialization
+**Completed**: Phase 6.4
+**Commit**: TBD
 
 ---
 
 ## Configuration Gaps
 
-### 6. Native Capture Configuration
-**Location**: `src/core/config.ts`
-**Status**: ❌ NOT IMPLEMENTED
-**Current Behavior**: No configuration for native capture
-**Required Implementation**:
-```typescript
-export interface Config {
-  // ... existing config
-  nativeCapture: {
-    enabled: boolean;
-    helperPath: string; // Path to Swift CLI helper
-    platform: NativeCapturePlatform;
-    defaultTimeout: number;
-  };
-}
-```
+### 6. Native Capture Configuration ⚠️ DEFERRED (Per Sub-Phase 3.5 Decision)
+**Location**: N/A
+**Status**: ⚠️ DEFERRED - Not Required
+**Decision**: Feature flags REJECTED per Sub-Phase 3.5 evaluation
 
-**Implementation Plan**: Phase 6.3
-**Default Values**:
-- `enabled`: `true` on macOS, `false` otherwise
-- `helperPath`: `./bin/screencapture-helper` (or platform-specific)
-- `platform`: Auto-detected from `os.platform()`
-- `defaultTimeout`: `30000` (30 seconds)
+**Rationale** (from sub-phase-3.5-feature-flag-evaluation.md):
+- Target type selection (`type: 'url'` vs `'type: 'region'`) already provides user choice
+- No performance benefit from configuration flags
+- Platform detection handled by factory pattern
+- If security needed: use env var policy check (simpler)
+
+**Current Approach**: No configuration needed
+- Factory function auto-detects platform
+- User selects capture type via MCP tool parameter
+- Clear error messages guide users
+
+**If Future Requirements Change**:
+- Consider environment variable: `ALLOW_DESKTOP_CAPTURE`
+- Simple policy check function
+- Do NOT add complex feature flag structure
 
 ---
 
@@ -170,7 +165,7 @@ export interface Config {
 - Build as standalone binary
 - Package with npm distribution
 
-**Implementation Plan**: Phase 6.4 (New Sub-Phase)
+**Implementation Plan**: Phase 6.5+ (Future Work)
 **Language**: Swift 5.9+
 **Frameworks**: ScreenCaptureKit, SwiftUI, AppKit
 **Build System**: Swift Package Manager or Xcode

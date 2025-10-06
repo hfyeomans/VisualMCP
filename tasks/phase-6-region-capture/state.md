@@ -4,7 +4,7 @@
 > The root project README.md is only updated when features are production-ready for end users.
 
 ## Current Status
-**Status**: Sub-Phase 3.5 Complete (Feature Flags REJECTED) - Ready for Phase 6.4
+**Status**: Phase 6.4 Complete (Production Wiring) - Ready for Phase 6.5 (Swift Implementation)
 **Created**: 2025-10-05
 **Last Updated**: 2025-10-05
 
@@ -136,27 +136,53 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 - ✅ Clear recommendation: REJECT feature flags
 - ✅ Guidance for Phase 6.4 implementation
 
-### Sub-Phase 4: Swift ScreenCaptureKit Implementation ⏳ PENDING
-**Goal**: Implement actual Swift helper for ScreenCaptureKit
-**Status**: Not Started
-**Dependencies**: Sub-Phase 2
+### Sub-Phase 4: Production Wiring ✅ COMPLETE
+**Goal**: Wire native capture manager into production server
+**Status**: Complete
+**Commit**: TBD
+**Dependencies**: Sub-Phase 3.5 (Feature flag decision)
 **Deliverables**:
-- Swift CLI application using ScreenCaptureKit
-- JSON-based IPC protocol implementation
-- SwiftUI picker for interactive mode
+- ✅ Updated `src/core/factories.ts` to call `createNativeCaptureManager()`
+- ✅ Native manager passed to `ScreenshotEngine` in production factory
+- ✅ Platform-aware: Factory auto-detects and creates appropriate manager
+- ✅ Cleanup handled via `ScreenshotEngine.cleanup()` chain
+- ✅ Updated stub-tracking.md to mark wiring as complete
+- ✅ No feature flags added (per Sub-Phase 3.5 decision)
+
+**What Was Done**:
+- Added import for `createNativeCaptureManager`
+- Factory now creates native manager and passes to ScreenshotEngine
+- Maintains platform awareness (macOS vs others)
+- Graceful degradation on unsupported platforms
+
+**What Was NOT Done** (Per Sub-Phase 3.5):
+- ❌ No feature flag configuration added
+- ❌ No conditional creation based on config
+- ❌ No admin toggle switches
+
+### Sub-Phase 5: Swift ScreenCaptureKit Implementation ⏳ PENDING
+**Goal**: Implement actual Swift CLI helper for ScreenCaptureKit
+**Status**: Not Started
+**Dependencies**: Sub-Phase 4 (Production wiring)
+**Deliverables**:
+- Swift CLI application using ScreenCaptureKit framework
+- JSON-based IPC protocol implementation (stdin/stdout)
+- SwiftUI picker for interactive window/region selection
 - Permission handling and error reporting
 - Build and distribution strategy
 - **Completes stub implementations in MacOSCaptureManager**
 
-### Sub-Phase 5: Production Wiring & Documentation ⏳ PENDING
-**Goal**: Update all documentation and provide migration guide
+### Sub-Phase 6: Documentation & User Guide ⏳ PENDING
+**Goal**: Update documentation for production-ready feature
 **Status**: Not Started
-**Dependencies**: Sub-Phases 1-4
+**Dependencies**: Sub-Phase 5 (Swift implementation complete)
 **Deliverables**:
-- Updated README.md
+- Updated README.md with desktop capture documentation
 - Migration guide for persistence changes
-- Interactive capture usage docs
-- API documentation updates
+- Target type selection guide (type: 'url' vs 'region')
+- Platform compatibility matrix
+- Screen Recording permission setup guide
+- Troubleshooting guide
 
 ## Technical Notes
 
