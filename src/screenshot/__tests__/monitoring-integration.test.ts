@@ -234,8 +234,9 @@ describe('MonitoringManager Integration', () => {
       autoFeedback: false
     });
 
-    // Session file should exist
-    const sessionFile = path.join(testSessionsDir, 'sessions', `${sessionId}.json`);
+    // Session directory should exist (Phase 6.3 - new per-session structure)
+    const sessionDir = path.join(testSessionsDir, 'sessions', sessionId);
+    const sessionFile = path.join(sessionDir, 'session.json');
     expect(await fs.pathExists(sessionFile)).toBe(true);
 
     // Verify initial persist
@@ -244,8 +245,8 @@ describe('MonitoringManager Integration', () => {
 
     await manager.stopMonitoring(sessionId);
 
-    // Session file should be deleted after stop
-    expect(await fs.pathExists(sessionFile)).toBe(false);
+    // Session directory should be deleted after stop
+    expect(await fs.pathExists(sessionDir)).toBe(false);
   });
 
   it('should load persisted sessions on init', async () => {

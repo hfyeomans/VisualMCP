@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.3**: Automatic migration from legacy flat JSON format to per-session directories
 - **Phase 6.3**: Public methods: `getSessionDirectory()`, `getImagesDirectory()`, `getRecordingsDirectory()` (future video support)
 - **Phase 6.3**: 16 comprehensive unit tests for persistence and migration (all passing)
+- **Phase 6.3**: P0 fix - Updated integration tests to check new per-session directory structure
 
 ### Changed
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
