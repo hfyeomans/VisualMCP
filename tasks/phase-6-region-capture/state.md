@@ -4,7 +4,7 @@
 > The root project README.md is only updated when features are production-ready for end users.
 
 ## Current Status
-**Status**: Sub-Phase 3 Complete (Monitoring Persistence) - Ready for Sub-Phase 3.5
+**Status**: Sub-Phase 3.5 Complete (Feature Flags REJECTED) - Ready for Phase 6.4
 **Created**: 2025-10-05
 **Last Updated**: 2025-10-05
 
@@ -98,15 +98,43 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 - ✅ Updated existing tests for new structure
 - ✅ Added 3 migration-specific test suites
 
-### Sub-Phase 3.5: Feature Flag Evaluation ⏳ PENDING
+### Sub-Phase 3.5: Feature Flag Evaluation ✅ COMPLETE (REJECTED)
 **Goal**: Evaluate feasibility of independent toggle switches for browser vs native capture
-**Status**: Not Started
+**Status**: Complete - **DECISION: REJECT FEATURE FLAGS**
+**Commit**: TBD
 **Dependencies**: Sub-Phase 3
+
+**Analysis Conducted**:
+- ✅ Security implications (runtime policy checks are better)
+- ✅ Performance impact (zero - managers are lightweight, lazy init)
+- ✅ Testing isolation (target type selection already provides this)
+- ✅ Platform availability (factory pattern already handles)
+- ✅ Comparison with industry patterns (Puppeteer, FFmpeg, Docker)
+- ✅ MCP philosophy alignment (expose capabilities, don't hide them)
+- ✅ Alternative solutions evaluated (env var policy checks)
+
+**Key Findings**:
+- **Target type selection already provides user choice** (`type: 'url'` vs `'type: 'region'`)
+- Selection happens at invocation time (MCP tool call), not configuration time
+- Zero performance cost (managers only consume resources when actively used)
+- Feature flags would add complexity without corresponding benefits
+- Current architecture scores 37/40 vs feature flags 19/40
+
+**Decision Rationale**:
+1. User explicitly chooses capture type via `target.type` parameter
+2. Platform detection handled by factory pattern (no duplication)
+3. Lazy initialization provides optimal performance
+4. Testing isolation via target type selection (no config needed)
+5. Follows MCP philosophy: expose capabilities, return helpful errors
+6. If security needed: use env var policy check (simpler than flags)
+
 **Deliverables**:
-- Analysis of use cases (security, performance, testing, platform-specific)
-- Architecture impact assessment
-- Configuration design proposal
-- Recommendation document (implement, defer, or reject)
+- ✅ Comprehensive evaluation document: `sub-phase-3.5-feature-flag-evaluation.md`
+- ✅ Evaluation matrix comparing approaches
+- ✅ Industry pattern research
+- ✅ Alternative solutions for each concern
+- ✅ Clear recommendation: REJECT feature flags
+- ✅ Guidance for Phase 6.4 implementation
 
 ### Sub-Phase 4: Swift ScreenCaptureKit Implementation ⏳ PENDING
 **Goal**: Implement actual Swift helper for ScreenCaptureKit
