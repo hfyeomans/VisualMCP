@@ -114,14 +114,14 @@ export class Logger {
 
     const formattedMessage = this.formatMessage(entry);
 
-    // Console output with colors
+    // Console output with colors - ALL LOGS GO TO STDERR (MCP protocol uses stdout)
     /* eslint-disable no-console */
     switch (level) {
       case 'debug':
-        console.log(`\x1b[36m${formattedMessage}\x1b[0m`); // Cyan
+        console.error(`\x1b[36m${formattedMessage}\x1b[0m`); // Cyan
         break;
       case 'info':
-        console.log(`\x1b[32m${formattedMessage}\x1b[0m`); // Green
+        console.error(`\x1b[32m${formattedMessage}\x1b[0m`); // Green
         break;
       case 'warn':
         console.warn(`\x1b[33m${formattedMessage}\x1b[0m`); // Yellow
