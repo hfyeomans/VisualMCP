@@ -31,6 +31,8 @@ export const ScreenshotOptionsSchema = z.object({
   quality: z.number().int().min(1).max(100).optional(),
   filename: z.string().optional(),
   fullPage: z.boolean().default(false),
+  timeout: z.number().int().positive().optional(),
+  waitForNetworkIdle: z.boolean().optional(),
   clip: z
     .object({
       x: z.number(),
@@ -235,3 +237,6 @@ export interface MonitoringSummary {
   screenshots: MonitoringScreenshot[];
   target: ScreenshotTarget;
 }
+
+// Native desktop capture types (Phase 6)
+export * from './native-capture.js';

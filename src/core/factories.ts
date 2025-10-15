@@ -21,6 +21,7 @@ import { imageProcessor } from '../utils/image-utils.js';
 import { browserManager } from './browser-manager.js';
 import { config } from './config.js';
 import { container } from './container.js';
+import { createNativeCaptureManager } from './native-capture-manager.js';
 import { cleanupManager } from './resource-manager.js';
 
 let servicesRegistered = false;
@@ -36,7 +37,10 @@ export function registerCoreServices(): void {
   container.registerInstance<IImageProcessor>(SERVICE_TOKENS.IMAGE_PROCESSOR, imageProcessor);
 
   container.registerSingleton<IScreenshotEngine>(SERVICE_TOKENS.SCREENSHOT_ENGINE, () => {
-    return new ScreenshotEngine(browserManager, fileManager, imageProcessor);
+    // Phase 6.4: Create platform-aware native capture manager
+    const nativeCaptureManager = createNativeCaptureManager();
+
+    return new ScreenshotEngine(browserManager, fileManager, imageProcessor, nativeCaptureManager);
   });
 
   container.registerSingleton<IComparisonEngine>(SERVICE_TOKENS.COMPARISON_ENGINE, () => {

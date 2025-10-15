@@ -8,7 +8,9 @@ import {
   FeedbackResult,
   MonitoringSession,
   MonitoringSummary,
-  StartMonitoringParams
+  StartMonitoringParams,
+  NativeCaptureOptions,
+  NativeCaptureResult
 } from '../types/index.js';
 
 /**
@@ -70,6 +72,38 @@ export interface IBrowserManager {
   closePage(page: unknown): Promise<void>;
   cleanup(): Promise<void>;
   isHealthy(): Promise<boolean>;
+}
+
+/**
+ * Interface for native desktop capture management
+ * Platform-specific implementations (macOS ScreenCaptureKit, Windows, Linux)
+ */
+export interface INativeCaptureManager {
+  /**
+   * Capture screenshot interactively (user selects window/region via picker UI)
+   */
+  captureInteractive(options: NativeCaptureOptions): Promise<NativeCaptureResult>;
+
+  /**
+   * Capture a specific desktop region by coordinates
+   * @param options - Full capture options including region, format, quality, timeout
+   */
+  captureRegion(options: NativeCaptureOptions): Promise<NativeCaptureResult>;
+
+  /**
+   * Check if native capture is available on this platform
+   */
+  isAvailable(): Promise<boolean>;
+
+  /**
+   * Get the current platform identifier
+   */
+  getPlatform(): string;
+
+  /**
+   * Cleanup resources (close helper processes, etc.)
+   */
+  cleanup(): Promise<void>;
 }
 
 /**

@@ -10,7 +10,8 @@ import {
   IScreenshotEngine,
   IBrowserManager,
   IFileManager,
-  IImageProcessor
+  IImageProcessor,
+  INativeCaptureManager
 } from '../interfaces/index.js';
 import { ScreenshotTarget, ScreenshotOptions, ScreenshotResult } from '../types/index.js';
 import { fileManager } from '../utils/file-utils.js';
@@ -30,11 +31,17 @@ export class ScreenshotEngine implements IScreenshotEngine {
   constructor(
     private browserManager: IBrowserManager,
     private readonly fileHelper: IFileManager = fileManager,
-    private readonly imageHelper: IImageProcessor = imageProcessor
+    private readonly imageHelper: IImageProcessor = imageProcessor,
+    private readonly nativeCaptureManager?: INativeCaptureManager
   ) {
     this.outputDir = config.outputDir;
     this.browserSession = new BrowserSession();
-    logger.debug('ScreenshotEngine initialized', { outputDir: this.outputDir });
+
+    logger.debug('ScreenshotEngine initialized', {
+      outputDir: this.outputDir,
+      hasNativeCapture: !!this.nativeCaptureManager,
+      nativePlatform: this.nativeCaptureManager?.getPlatform() || 'none'
+    });
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -216,90 +223,70 @@ export class ScreenshotEngine implements IScreenshotEngine {
       filename?: string;
       clip?: { x: number; y: number; width: number; height: number };
     },
-    filepath: string,
-    timestamp: string
+    _filepath: string,
+    _timestamp: string
   ): Promise<ScreenshotResult> {
-    logger.warn('Desktop region capture not fully implemented, creating placeholder');
-
-    // This is a placeholder implementation - in production, you'd use platform-specific
-    // screen capture APIs or tools like screenshot-desktop
-    const placeholderHtml = `
-      <html>
-        <body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f0f0f0;">
-          <div style="border: 2px dashed #999; padding: 30px; text-align: center; background: white;">
-            <h2 style="color: #666;">Region Screenshot Placeholder</h2>
-            <p><strong>Target Region:</strong> (${target.x}, ${target.y}) ${target.width}×${target.height}</p>
-            <p style="color: #666; font-size: 14px;">
-              Desktop region capture requires platform-specific implementation.
-              <br>This placeholder represents the requested region.
-            </p>
-            <div style="margin-top: 20px; padding: 10px; background: #e8f4f8; border: 1px solid #b8e0f0; border-radius: 4px;">
-              <small>Timestamp: ${timestamp}</small>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    let page: Page | null = null;
-
-    try {
-      page = (await this.browserManager.createPage()) as Page;
-
-      if (page) {
-        await page.setContent(placeholderHtml);
-        await page.setViewport({
-          width: Math.max(target.width, 400),
-          height: Math.max(target.height, 300)
-        });
-      }
-
-      const screenshotOptions: {
-        path: string;
-        type?: 'png' | 'jpeg';
-        clip?: { x: number; y: number; width: number; height: number };
-        quality?: number;
-      } = {
-        path: filepath,
-        type: options.format || options.defaultFormat,
-        clip: {
-          x: 0,
-          y: 0,
-          width: Math.max(target.width, 400),
-          height: Math.max(target.height, 300)
-        }
-      };
-
-      if ((options.format || options.defaultFormat) === 'jpeg') {
-        screenshotOptions.quality = options.quality || options.defaultQuality;
-      }
-
-      if (page) {
-        await page.screenshot(screenshotOptions);
-      }
-
-      const metadata = await this.imageHelper.getImageMetadata(filepath);
-
-      logger.info('Region screenshot placeholder created', {
-        filepath,
-        region: `${target.x},${target.y} ${target.width}×${target.height}`,
-        size: metadata.size
+    // Check if native capture manager is available
+    if (!this.nativeCaptureManager) {
+      logger.warn('Desktop region capture attempted but no native capture manager available', {
+        targetRegion: { x: target.x, y: target.y, width: target.width, height: target.height }
       });
 
-      return {
-        filepath,
-        width: metadata.width,
-        height: metadata.height,
-        format: options.format || 'png',
-        size: metadata.size,
-        timestamp,
-        target
-      };
-    } finally {
-      if (page) {
-        await this.browserManager.closePage(page);
-      }
+      throw new ScreenshotError(
+        'Desktop region capture is not available. Native capture manager not initialized. ' +
+          'This feature requires macOS with ScreenCaptureKit support. ' +
+          'Please use URL-based screenshots (target.type = "url") for web content capture.',
+        'NATIVE_CAPTURE_UNAVAILABLE'
+      );
     }
+
+    // Check platform availability
+    const isAvailable = await this.nativeCaptureManager.isAvailable();
+    if (!isAvailable) {
+      const platform = this.nativeCaptureManager.getPlatform();
+      logger.warn('Native capture not available on this platform', { platform });
+
+      throw new ScreenshotError(
+        `Native desktop capture is not supported on platform: ${platform}. ` +
+          'Currently only macOS (via ScreenCaptureKit) is supported. ' +
+          'Please use URL-based screenshots (target.type = "url") as an alternative.',
+        'PLATFORM_NOT_SUPPORTED'
+      );
+    }
+
+    logger.info('Attempting native desktop region capture', {
+      targetRegion: { x: target.x, y: target.y, width: target.width, height: target.height },
+      format: options.format || options.defaultFormat,
+      platform: this.nativeCaptureManager.getPlatform()
+    });
+
+    // Construct full NativeCaptureOptions from ScreenshotOptions (P1 fix)
+    const nativeCaptureOptions = {
+      region: {
+        x: target.x,
+        y: target.y,
+        width: target.width,
+        height: target.height
+      },
+      format: options.format || options.defaultFormat,
+      quality: options.quality || (options.format === 'jpeg' ? options.defaultQuality : undefined),
+      timeout: options.timeout,
+      outputPath: _filepath
+    };
+
+    // Delegate to native capture manager
+    const result = await this.nativeCaptureManager.captureRegion(nativeCaptureOptions);
+
+    // Convert native result to ScreenshotResult format
+    return {
+      filepath: result.filepath,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      size: result.size,
+      timestamp: result.timestamp,
+      target
+    };
   }
 
   async listScreenshots(): Promise<string[]> {
@@ -353,6 +340,12 @@ export class ScreenshotEngine implements IScreenshotEngine {
 
   async cleanup(): Promise<void> {
     logger.info('Cleaning up ScreenshotEngine');
+
+    // Cleanup native capture manager if present
+    if (this.nativeCaptureManager) {
+      await this.nativeCaptureManager.cleanup();
+    }
+
     // Cleanup is handled by BrowserManager
     // Any additional cleanup specific to ScreenshotEngine would go here
   }

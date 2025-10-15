@@ -84,3 +84,13 @@ export async function waitForCondition(
 
   return false;
 }
+
+// This file contains helper utilities for E2E tests
+// Jest requires at least one test per test file, but this is a helper file
+// So we add a dummy describe block to satisfy Jest
+describe('E2E Test Helpers', () => {
+  it('should export helper utilities', () => {
+    expect(typeof TestMCPServer).toBe('function');
+    expect(typeof waitForCondition).toBe('function');
+  });
+});

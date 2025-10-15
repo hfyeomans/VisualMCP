@@ -133,3 +133,15 @@ export const TOOL_SCHEMAS = {
     requiredParams: ['sessionId']
   }
 };
+
+// This file contains fixture utilities for E2E tests
+// Jest requires at least one test per test file, but this is a fixture file
+// So we add a dummy describe block to satisfy Jest
+describe('E2E Test Fixtures', () => {
+  it('should export fixture utilities', () => {
+    expect(typeof setupTestFixtures).toBe('function');
+    expect(typeof cleanupTestFixtures).toBe('function');
+    expect(Array.isArray(EXPECTED_TOOLS)).toBe(true);
+    expect(typeof TOOL_SCHEMAS).toBe('object');
+  });
+});
