@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 
-import puppeteer, { Browser, Page, PuppeteerLaunchOptions } from 'puppeteer';
+import puppeteer, { Browser, Page, LaunchOptions } from 'puppeteer';
 
 import { IBrowserManager, ICleanupManager } from '../interfaces/index.js';
 
@@ -84,7 +84,7 @@ export class BrowserManager extends EventEmitter implements IBrowserManager {
     try {
       logger.info('Launching browser');
 
-      const launchOptions: PuppeteerLaunchOptions = {
+      const launchOptions: LaunchOptions = {
         headless: config.browserConfig.headless,
         args: config.browserConfig.args,
         timeout: config.browserConfig.timeout,

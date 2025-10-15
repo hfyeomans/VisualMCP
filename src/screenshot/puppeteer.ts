@@ -154,19 +154,20 @@ export class ScreenshotEngine implements IScreenshotEngine {
       });
 
       // Take screenshot
+      const format = options.format || options.defaultFormat;
       const screenshotOptions: {
-        path: string;
+        path: `${string}.png` | `${string}.jpeg` | `${string}.webp`;
         type?: 'png' | 'jpeg';
         fullPage?: boolean;
         quality?: number;
         clip?: { x: number; y: number; width: number; height: number };
       } = {
-        path: filepath,
-        type: options.format || options.defaultFormat,
+        path: filepath as `${string}.png` | `${string}.jpeg`,
+        type: format,
         fullPage: options.fullPage
       };
 
-      if ((options.format || options.defaultFormat) === 'jpeg') {
+      if (format === 'jpeg') {
         screenshotOptions.quality = options.quality || options.defaultQuality;
       }
 
