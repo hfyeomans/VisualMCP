@@ -97,6 +97,14 @@
 - Tests covering new error handling and persistence.
 - Documentation pages describing interactive capture flow and persistence changes.
 
+## Commit Strategy
+**IMPORTANT**: Commit code changes after each phase/sub-phase completion to maintain clear checkpoints:
+- Create small, reviewable commits
+- Clear commit messages referencing phase/sub-phase
+- Allows rollback if needed
+- Better git history for future reference
+- Example: "feat(phase6): Swift Phase 3 - Basic Region Capture implementation"
+
 ## Risks & Mitigations
 - **Native helper complexity:** mitigate by defining a narrow CLI contract and staging implementation (error first, design doc now).
 - **Permission failures:** ensure error messages instruct users to grant Screen Recording access.

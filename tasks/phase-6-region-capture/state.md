@@ -4,9 +4,9 @@
 > The root project README.md is only updated when features are production-ready for end users.
 
 ## Current Status
-**Status**: Phase 6.4 Complete (Production Wiring) - Ready for Phase 6.5 (Swift Implementation)
+**Status**: Sub-Phase 5 IN PROGRESS (Swift Implementation - Phase 2 Complete)
 **Created**: 2025-10-05
-**Last Updated**: 2025-10-05
+**Last Updated**: 2025-10-15
 
 ## Context
 Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Tahoe 26), restructures monitoring persistence into per-session directories, and establishes an extensible adapter architecture for future platform support.
@@ -160,17 +160,60 @@ Phase 6 implements native macOS desktop capture using ScreenCaptureKit (macOS Ta
 - ❌ No conditional creation based on config
 - ❌ No admin toggle switches
 
-### Sub-Phase 5: Swift ScreenCaptureKit Implementation ⏳ PENDING
+### Sub-Phase 5: Swift ScreenCaptureKit Implementation ⏳ IN PROGRESS
 **Goal**: Implement actual Swift CLI helper for ScreenCaptureKit
-**Status**: Not Started
-**Dependencies**: Sub-Phase 4 (Production wiring)
-**Deliverables**:
-- Swift CLI application using ScreenCaptureKit framework
-- JSON-based IPC protocol implementation (stdin/stdout)
-- SwiftUI picker for interactive window/region selection
-- Permission handling and error reporting
-- Build and distribution strategy
-- **Completes stub implementations in MacOSCaptureManager**
+**Status**: In Progress - Swift Phase 2 Complete
+**Dependencies**: Sub-Phase 4 (Production wiring) ✅ COMPLETE
+**Location**: `/Users/hank/dev/src/VisualMCP/screencapture-helper/`
+
+**Swift Implementation Phases** (internal roadmap within Sub-Phase 5):
+- ✅ Swift Phase 1: Core Infrastructure (IPC layer) - COMPLETE
+  - JSON over stdin/stdout working
+  - Command parsing and routing
+  - 10 unit tests passing
+  - Binary: 229KB release
+  - Validation: phase1-test-report.md
+- ✅ Swift Phase 2: Permission & Availability - COMPLETE
+  - PermissionManager with ScreenCaptureKit integration
+  - CaptureCoordinator actor for command routing
+  - `check_availability` command working
+  - System Settings deeplink functional
+  - 16 unit tests passing (6 new)
+  - Binary: 430KB
+  - Validation: phase2-test-report.md
+- ⏳ Swift Phase 3: Basic Region Capture - NEXT
+  - CaptureEngine with ScreenCaptureKit
+  - ImageProcessor for encoding
+  - `capture_region` command
+  - Timeout handling
+- ⏳ Swift Phase 4: Interactive Picker (Week 3)
+  - SwiftUI picker for window selection
+  - `capture_interactive` command
+- ⏳ Swift Phase 5: Region Selector (Week 3-4)
+  - Interactive region selection overlay
+- ⏳ Swift Phase 6: Polish & Optimization (Week 4)
+  - Retry logic, binary optimization, comprehensive tests
+- ⏳ Swift Phase 7: Integration & Deployment (Week 5)
+  - Complete MacOSCaptureManager TypeScript stubs
+  - Remove stub error throws
+  - Integration testing
+
+**Deliverables Completed So Far**:
+- ✅ Swift CLI project structure with Package.swift
+- ✅ JSON-based IPC protocol working (stdin/stdout)
+- ✅ Permission handling with ScreenCaptureKit
+- ✅ check_availability command functional
+- ✅ System Settings deeplink
+- ✅ Comprehensive unit tests (16 tests)
+- ✅ Design documentation (sub-phase-5-swift-design.md)
+
+**Remaining Deliverables**:
+- ⏳ ScreenCaptureKit capture implementation
+- ⏳ SwiftUI picker for interactive selection
+- ⏳ Region selector overlay
+- ⏳ Complete MacOSCaptureManager TypeScript stubs
+- ⏳ Build and distribution strategy
+- ⏳ Integration testing
 
 ### Sub-Phase 6: Documentation & User Guide ⏳ PENDING
 **Goal**: Update documentation for production-ready feature
