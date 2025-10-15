@@ -1,5 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -80,7 +81,7 @@ export class MacOSCaptureManager extends EventEmitter implements INativeCaptureM
   private async findHelperBinary(): Promise<string> {
     if (this.helperPath) {
       try {
-        await fs.access(this.helperPath, fs.constants.X_OK);
+        await fs.access(this.helperPath, fsConstants.X_OK);
         logger.debug('Using custom helper path', { path: this.helperPath });
         return this.helperPath;
       } catch (error) {
@@ -105,7 +106,7 @@ export class MacOSCaptureManager extends EventEmitter implements INativeCaptureM
 
     for (const location of locations) {
       try {
-        await fs.access(location, fs.constants.X_OK);
+        await fs.access(location, fsConstants.X_OK);
         logger.debug('Found helper binary', { location });
         return location;
       } catch {
@@ -129,7 +130,7 @@ export class MacOSCaptureManager extends EventEmitter implements INativeCaptureM
     }
 
     try {
-      await fs.access(this.helperPath, fs.constants.X_OK);
+      await fs.access(this.helperPath, fsConstants.X_OK);
     } catch (error) {
       throw new ScreenshotError(
         `Helper binary not executable: ${this.helperPath}. Error: ${error instanceof Error ? error.message : String(error)}`,

@@ -91,23 +91,42 @@ final class CaptureEngine: Sendable {
     ///   - stream: The SCStream to capture from
     ///   - timeout: Maximum time to wait for capture
     /// - Returns: CGImage of the captured frame
-    /// - Throws: CaptureError if capture fails
+    /// - Throws: CaptureError if capture fails or timeout occurs
     private static func captureFrameFromStream(stream: SCStream, timeout: TimeInterval) async throws -> CGImage {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGImage, Error>) in
-            let handler = StreamOutputHandler(continuation: continuation)
+        return try await withThrowingTaskGroup(of: CGImage.self) { group in
+            // Task 1: Start capture and wait for frame
+            group.addTask {
+                return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CGImage, Error>) in
+                    let handler = StreamOutputHandler(continuation: continuation)
 
-            Task {
-                do {
-                    try stream.addStreamOutput(handler, type: .screen, sampleHandlerQueue: .main)
-                    try await stream.startCapture()
-
-                    try await Task.sleep(nanoseconds: 100_000_000)
-
-                    try await stream.stopCapture()
-                } catch {
-                    continuation.resume(throwing: CaptureError.captureFailed(reason: error.localizedDescription))
+                    Task {
+                        do {
+                            try stream.addStreamOutput(handler, type: .screen, sampleHandlerQueue: .main)
+                            try await stream.startCapture()
+                        } catch {
+                            continuation.resume(throwing: CaptureError.captureFailed(reason: error.localizedDescription))
+                        }
+                    }
                 }
             }
+
+            // Task 2: Timeout watchdog
+            group.addTask {
+                let timeoutNanoseconds = UInt64(timeout * 1_000_000_000)
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw CaptureError.timeout
+            }
+
+            // Wait for first task to complete (either frame captured or timeout)
+            guard let result = try await group.next() else {
+                throw CaptureError.internalError(reason: "No result from capture task group")
+            }
+
+            // Cancel remaining tasks and stop stream
+            group.cancelAll()
+            try? await stream.stopCapture()
+
+            return result
         }
     }
 }

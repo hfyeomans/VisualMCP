@@ -122,9 +122,7 @@ actor CaptureCoordinator {
             permissionStatus: permissionStatus.rawValue
         )
 
-        // Convert to CaptureResult format for consistency with IPC protocol
-        // We'll encode the availability result as JSON string for the filepath field
-        // This is a workaround since check_availability doesn't actually capture anything
+        // Encode availability result as JSON
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
 
@@ -138,9 +136,24 @@ actor CaptureCoordinator {
             )
         }
 
-        // Create a special CaptureResult for availability check
+        // Write availability JSON to a temporary file so TypeScript can read it
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("availability-\(requestId).json")
+
+        do {
+            try jsonData.write(to: tempFile)
+        } catch {
+            return .error(
+                requestId: requestId,
+                code: "FILE_WRITE_ERROR",
+                message: "Failed to write availability data to temp file",
+                details: ["error": error.localizedDescription]
+            )
+        }
+
+        // Create CaptureResult with actual file path
         let result = CaptureResult(
-            filepath: "availability_check",
+            filepath: tempFile.path,
             width: 0,
             height: 0,
             format: "json",
@@ -165,12 +178,13 @@ actor CaptureCoordinator {
                     "permissionStatus": permissionStatus.rawValue,
                     "instructions": "Open System Settings > Privacy & Security > Screen Recording and enable permission for this application",
                     "deeplink": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-                    "availabilityData": jsonString
+                    "availabilityData": jsonString,
+                    "availabilityFile": tempFile.path
                 ]
             )
         }
 
-        // Return success with availability data in details
+        // Return success with availability data file path
         return .success(requestId: requestId, result: result)
     }
 
