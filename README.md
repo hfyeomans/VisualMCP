@@ -5,8 +5,9 @@ A Model Context Protocol (MCP) server that provides visual feedback capabilities
 ## 🚀 Features
 
 - **Screenshot Capture**: Take screenshots of web pages, windows, or specific regions
+- **Native Desktop Capture**: 🖥️ Capture desktop regions on macOS 15+ using ScreenCaptureKit (requires Screen Recording permission)
 - **Visual Comparison**: Compare screenshots with reference designs and detect differences
-- **Real-time Monitoring**: Monitor applications for visual changes at configurable intervals  
+- **Real-time Monitoring**: Monitor applications for visual changes at configurable intervals
 - **AI-powered Feedback**: Generate actionable improvement suggestions from visual differences
 - **Cross-platform**: Supports macOS, Windows, and Linux
 - **MCP Integration**: Works seamlessly with Claude Code, LMStudio, and other MCP clients
@@ -15,8 +16,15 @@ A Model Context Protocol (MCP) server that provides visual feedback capabilities
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn package manager
+
+#### Native Desktop Capture (Optional)
+- macOS 15+ (Sequoia)
+- Screen Recording permission
+- Bundled Swift helper binary (included)
+
+See [Native Capture Guide](docs/NATIVE_CAPTURE.md) for setup details.
 
 ### Install Dependencies
 
@@ -250,6 +258,47 @@ VisualMCP/
 
 ## 🎯 Usage Examples
 
+### Desktop Region Capture (macOS 15+)
+
+Capture a specific region of your desktop:
+
+```typescript
+const result = await take_screenshot({
+  target: {
+    type: 'region',
+    x: 0,
+    y: 0,
+    width: 1920,
+    height: 1080
+  },
+  options: {
+    format: 'png',
+    filename: 'desktop-capture.png'
+  }
+})
+```
+
+**JPEG with quality:**
+
+```typescript
+const result = await take_screenshot({
+  target: {
+    type: 'region',
+    x: 100,
+    y: 100,
+    width: 800,
+    height: 600
+  },
+  options: {
+    format: 'jpeg',
+    quality: 85,
+    filename: 'window-area.jpg'
+  }
+})
+```
+
+**Note**: Requires macOS 15+ and Screen Recording permission. See [Native Capture Guide](docs/NATIVE_CAPTURE.md) for details.
+
 ### Basic Screenshot Workflow
 
 ```bash
@@ -371,12 +420,25 @@ stop_monitoring {
 - Check MCP client configuration
 - Look for errors in server logs
 
+**"Native capture permission denied"** (macOS)
+- Open System Settings > Privacy & Security > Screen Recording
+- Enable permission for your application (Terminal, Node, or IDE)
+- Restart the application completely
+- See [Screen Recording Permission Guide](docs/SCREEN_RECORDING_PERMISSION.md)
+
 ### Debug Mode
 
 Set environment variable for detailed logging:
 ```bash
 DEBUG=visual-mcp:* node dist/index.js
 ```
+
+## 📚 Documentation
+
+- [Native Desktop Capture Guide](docs/NATIVE_CAPTURE.md) - macOS desktop capture with ScreenCaptureKit
+- [Screen Recording Permission Setup](docs/SCREEN_RECORDING_PERMISSION.md) - Step-by-step permission guide
+- [Platform Compatibility](docs/PLATFORM_COMPATIBILITY.md) - Supported platforms and features
+- [IPC Protocol Reference](screencapture-helper/IPC-PROTOCOL.md) - Swift helper binary protocol
 
 ## 🤝 Contributing
 
