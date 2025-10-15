@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 6.5**: Native macOS desktop capture using ScreenCaptureKit framework
+- Swift CLI helper (`screencapture-helper`) for native screen capture on macOS 15+
+- `capture_region` command for programmatic region capture via ScreenCaptureKit
+- `check_availability` command for permission and system capability checking
+- MacOSCaptureManager TypeScript implementation with IPC communication layer
+- Helper binary finding with 5 search locations for flexible deployment
+- Process lifecycle management (spawn, timeout, graceful shutdown)
+- Comprehensive error conversion from Swift to TypeScript with actionable messages
+- 57 new tests (23 Swift + 34 TypeScript) covering native capture functionality
 - E2E test harness using @modelcontextprotocol/sdk for comprehensive server testing
 - ESLint import ordering rules with automatic alphabetization
 - GitHub Actions CI pipeline with lint, typecheck, unit, e2e, and build stages
@@ -42,8 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.3**: P0 fix - Updated integration tests to check new per-session directory structure
 - **Phase 6.3.5**: Feature flag evaluation complete - REJECTED feature flags (see evaluation document)
 - **Phase 6.4**: Native capture manager wired into production factory (platform-aware auto-detection)
+- **Phase 6.5**: Swift ScreenCaptureKit CLI helper implementation (Phases 1-3 complete)
+  - Phase 1: Core Infrastructure - JSON IPC protocol (stdin/stdout), 10 tests
+  - Phase 2: Permission & Availability - ScreenCaptureKit integration, 6 tests
+  - Phase 3: Basic Region Capture - Actual capture with PNG/JPEG encoding, 7 tests
+- **Phase 6.5**: MacOSCaptureManager TypeScript integration complete (all stubs removed)
+- **Phase 6.5**: Swift helper binary bundled in `bin/screencapture-helper` (342KB)
 
 ### Changed
+- **BREAKING**: Desktop region capture now requires macOS 15+ with ScreenCaptureKit (previously placeholder)
 - **BREAKING**: Scheduler configuration values (jitter, backoff) now properly honored instead of hardcoded
 - **Phase 6.1**: Desktop region capture (`target.type = 'region'`) now throws descriptive `ScreenshotError` instead of creating placeholder HTML
 - **Phase 6.2**: `ScreenshotEngine` now accepts optional `INativeCaptureManager` parameter (follows `BrowserManager` pattern)
@@ -59,6 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 6.3**: Automatic migration from legacy flat structure on first load
 - **Phase 6.3**: Legacy files backed up as `*.json.migrated` after migration
 - **Phase 6.4**: Production factory now creates and wires native capture manager automatically
+- **Phase 6.5**: MacOSCaptureManager now spawns Swift helper for actual capture (IPC communication)
+- **Phase 6.5**: Helper binary finding searches 5 locations for flexible deployment
+- **Phase 6.5**: Error messages include Screen Recording permission instructions with deeplink
 - `no-console` ESLint rule changed from 'warn' to 'error' (intentional console usage requires eslint-disable)
 - All services now use constructor-based dependency injection
 - Configuration manager supports deep merging without overwriting unrelated fields
