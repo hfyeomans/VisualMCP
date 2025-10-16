@@ -94,12 +94,14 @@ export class MacOSCaptureManager extends EventEmitter implements INativeCaptureM
 
     // Try multiple possible locations for the helper binary
     const locations = [
+      // Global npm install (from dist/core/ to bin/)
+      path.join(__dirname, '../../bin', this.HELPER_BINARY_NAME),
       // Relative to current working directory
       path.join(process.cwd(), 'bin', this.HELPER_BINARY_NAME),
       path.join(process.cwd(), 'screencapture-helper/.build/release', this.HELPER_BINARY_NAME),
       path.join(process.cwd(), 'screencapture-helper/.build/debug', this.HELPER_BINARY_NAME),
       // In node_modules
-      path.join(process.cwd(), 'node_modules/visual-mcp/bin', this.HELPER_BINARY_NAME),
+      path.join(process.cwd(), 'node_modules/@visualmcp/visual-mcp-server/bin', this.HELPER_BINARY_NAME),
       // System-wide installation
       `/usr/local/bin/${this.HELPER_BINARY_NAME}`
     ];

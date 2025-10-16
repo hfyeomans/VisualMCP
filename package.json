@@ -20,7 +20,8 @@
     "validate": "node validate-mcp.js",
     "demo": "node cli-tools/demo.js",
     "test-runner": "node cli-tools/test-runner.js",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "mcp",
@@ -79,6 +80,8 @@
   },
   "files": [
     "dist/**/*",
+    "bin/screencapture-helper",
+    "scripts/postinstall.js",
     "README.md",
     "LICENSE"
   ]

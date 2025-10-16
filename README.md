@@ -72,7 +72,62 @@ Visual MCP bridges the gap between what coding agents build and the visual outco
 - Node.js 18+
 - npm or yarn
 
-### Quick Install
+### Global Installation (Recommended)
+
+Install Visual MCP globally to use from any project directory:
+
+```bash
+npm install -g @visualmcp/visual-mcp-server
+```
+
+**Configure in** `~/.claude.json` (user-level):
+
+```json
+{
+  "mcps": {
+    "visual-mcp": {
+      "command": "visual-mcp"
+    }
+  }
+}
+```
+
+**Output directories:** Screenshots/comparisons are created in your current working directory by default. For a consistent location:
+
+```json
+{
+  "mcps": {
+    "visual-mcp": {
+      "command": "visual-mcp",
+      "env": {
+        "VISUAL_MCP_OUTPUT_DIR": "$HOME/.visual-mcp/screenshots",
+        "VISUAL_MCP_COMPARISONS_DIR": "$HOME/.visual-mcp/comparisons"
+      }
+    }
+  }
+}
+```
+
+### Using with npx (No Install Required)
+
+Run Visual MCP without installing:
+
+```json
+{
+  "mcps": {
+    "visual-mcp": {
+      "command": "npx",
+      "args": ["-y", "@visualmcp/visual-mcp-server"]
+    }
+  }
+}
+```
+
+**Note:** npx downloads on first run (slight delay), then caches locally.
+
+### Local Development Install
+
+For development or testing from source:
 
 ```bash
 # Clone the repository
@@ -103,9 +158,23 @@ For capturing desktop regions on **macOS 15+ (Sequoia)**:
 
 ## MCP Integration
 
-### Claude Code
+### Recommended: Global Install
 
-Add to your MCP settings (`~/.claude/config.json` or project settings):
+For most users, global installation is simplest:
+
+```json
+{
+  "mcps": {
+    "visual-mcp": {
+      "command": "visual-mcp"
+    }
+  }
+}
+```
+
+### Alternative: Local Development
+
+If you're developing Visual MCP or need a specific version:
 
 ```json
 {
