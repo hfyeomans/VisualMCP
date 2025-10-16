@@ -96,7 +96,7 @@ npm install -g @visualmcp/visual-mcp-server
 
 ```json
 {
-  "mcps": {
+  "mcpServers": {
     "visual-mcp": {
       "command": "visual-mcp",
       "env": {
@@ -114,7 +114,7 @@ Run Visual MCP without installing:
 
 ```json
 {
-  "mcps": {
+  "mcpServers": {
     "visual-mcp": {
       "command": "npx",
       "args": ["-y", "@visualmcp/visual-mcp-server"]
@@ -178,7 +178,7 @@ If you're developing Visual MCP or need a specific version:
 
 ```json
 {
-  "mcps": {
+  "mcpServers": {
     "visual-mcp": {
       "command": "node",
       "args": ["dist/index.js"],
