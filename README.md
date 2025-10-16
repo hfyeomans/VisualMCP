@@ -84,7 +84,7 @@ npm install -g @visualmcp/visual-mcp-server
 
 ```json
 {
-  "mcps": {
+  "mcpServers": {
     "visual-mcp": {
       "command": "visual-mcp"
     }
@@ -164,7 +164,7 @@ For most users, global installation is simplest:
 
 ```json
 {
-  "mcps": {
+  "mcpServers": {
     "visual-mcp": {
       "command": "visual-mcp"
     }
